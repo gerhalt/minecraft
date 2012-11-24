@@ -1,10 +1,14 @@
+#include <Python.h>
 #include <regex.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <zlib.h>
+#include "zlib.h"
 
 /*
+Just a disclaimer, this is me being extremely rusty at C, so I wouldn't look
+to this for coding tips or anything.
 
 Functionality
 ---------------------
@@ -19,7 +23,7 @@ int CHUNK_INFLATE_MAX = 131072;
 
 // Takes a number of bytes (in big-endian order), starting at a given location,
 // and returns the integer they represent
-int bytes_to_int( unsigned char * buffer, int bytes )
+long bytes_to_long( unsigned char * buffer, int bytes )
 {
     int transform;
 
@@ -83,7 +87,7 @@ int get_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int
     fseek(region_file, 4 * ((chunkX & 31) + (chunkZ & 31) * 32), SEEK_SET);
     fread(small_buffer, 4, 1, region_file);
 
-    offset = bytes_to_int(small_buffer, 3) * 4096;
+    offset = bytes_to_long(small_buffer, 3) * 4096;
     if ( offset == 0 )
     {
         //printf("Chunk is empty!\n");
@@ -96,8 +100,8 @@ int get_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int
     fseek(region_file, offset, SEEK_SET);
     memset(small_buffer, 0, 5);
     fread(small_buffer, 5, 1, region_file);
-    chunk_length = bytes_to_int(small_buffer, 4);
-    compression_type = bytes_to_int(small_buffer + 4, 1);
+    chunk_length = bytes_to_long(small_buffer, 4);
+    compression_type = bytes_to_long(small_buffer + 4, 1);
     printf("Actual Length: %d\n", chunk_length);
     printf("Compression scheme: %d\n", compression_type);
 
@@ -107,108 +111,187 @@ int get_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int
     return 1;
 }
 
-int read_tags( char * dict, unsigned char * tag, int depth )
+// Given a pointer to a payload, return a PyObject representing that payload
+// moved will be modified by the amount the tag pointer shifted
+PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
 {
-    unsigned char * payload;
-    char tag_id;
-    short int tag_name_length;
+    PyObject * payload;
 
-    tag_id = tag[0];
-    tag_name_length = bytes_to_int(tag + 1, 2);
-    printf("Tag ID: %d | Name Length: %hd\n", tag_id, tag_name_length);
-
-    // Print tag name, if one exists (or just save it)
-    if ( tag_name_length > 0 )
+    // The only time the tag_id should be -1 is if the root is passed in
+    if( tag_id == -1 )
     {
-        dict = "\'%.*s\':", tag_name_length, tag + 3;
-        dict += tag_name_length + 3; // Move ahead to where the data belongs
-        printf("Name: %.*s\n", tag_name_length, tag + 3);
+        printf("ROOT TAG\n");
+        tag_id = tag[0];
+        tag += 3; // Skip the length of the same, since we know it to be 0
     }
 
-    // Move to the payload portion of the tag
-    tag += 3 + tag_name_length;
-    switch ( tag_id )
+    switch(tag_id)
     {
+        long size;
+        int sub_moved;
+        unsigned char list_tag_id;
+
         case 0:
-            printf("End tag");
+            printf("END TAG, SHOULD NOT FIND\n");
+            return NULL;
+
+        // All these need to be converted (from big-endian)
+
+        case 1: // Byte
+            payload = PyInt_FromLong(bytes_to_long(tag, 1));
+            *moved += sizeof(char);
             break;
 
-        case 1:
-            printf("Byte: %2x", *tag);
+        case 2: // Short
+            payload = PyInt_FromLong(bytes_to_long(tag, sizeof(short)));
+            *moved += sizeof(short);
             break;
 
-        case 2:
-            printf("Short: %4x", *tag);
+        case 3: // Int
+            payload = PyInt_FromLong(bytes_to_long(tag, sizeof(int)));
+            *moved += sizeof(int);
             break;
 
-        case 3:
-            printf("Int: %d", *tag);
+        case 4: // Long
+            payload = PyInt_FromLong(bytes_to_long(tag, sizeof(long)));
+            *moved += sizeof(long);
             break;
 
-        case 4:
-            printf("Long: %16x", *tag);
+        case 5: // Float
+            payload = PyFloat_FromDouble((double) bytes_to_long(tag, sizeof(float)));
+            *moved += sizeof(float);
             break;
 
-        case 5:
-            printf("Float: %f", * (double *) tag);
+        case 6: // Double
+            payload = PyFloat_FromDouble((double) bytes_to_long(tag, sizeof(double)));
+            *moved += sizeof(double);
             break;
 
-        case 6:
-            printf("Double: %16x", *tag);
+        case 7: // Byte array
+            size = bytes_to_long(tag, sizeof(int));
+            printf("Byte array size: %ld\n", size);
+            payload = PyByteArray_FromStringAndSize(tag + sizeof(int), size);
+            *moved += sizeof(int) + size;
             break;
 
-        // Interesting tag cases
-        case 7:  // Byte array
-            printf("Length: %d (Byte array)", *tag);
+        case 11: // Int array
+            size = bytes_to_long(tag, sizeof(int));
+            tag += sizeof(int);
+
+            payload = PyList_New(size);
+            for( int i = 0; i < size; i++ )
+            {
+                PyObject * integer;
+
+                integer = PyInt_FromLong(bytes_to_long(tag, sizeof(int)));
+                PyList_SET_ITEM(payload, i, integer);
+                tag += sizeof(int);
+            }
+            *moved += sizeof(int) * (size + 1);
             break;
 
-        case 8:  // String
-            printf("Length: %2x | String: %.*s", *tag, *tag, tag + 2);
+        case 8: // String
+            size = bytes_to_long(tag, sizeof(short));
+            payload = PyString_FromStringAndSize(tag + sizeof(short), size);
+            *moved += sizeof(short) + size;
             break;
 
-        // 1 - tagID | 4 - size | size * tagIDs' payloads 
-        case 9:  // List
-            printf("Tag ID: %2x | Size: %d | Extra", *tag, tag[1]);
+        case 9: // List
+            printf("LIST\n");
+            list_tag_id = tag[0];
+            size = bytes_to_long(tag + 1, sizeof(int));
+            tag += 1 + sizeof(int);
+
+            payload = PyList_New(size);
+            sub_moved = 0;
+            for( int i = 0; i < size; i++ )
+            {
+                PyObject * list_item;
+
+                list_item = get_tag(tag, list_tag_id, &sub_moved);
+                PyList_SET_ITEM(payload, i, list_item);
+                tag += sub_moved;
+                printf("list item moved %d bytes", sub_moved);
+            }
+            *moved += 5 + sub_moved;
             break;
 
         case 10: // Compound
-            strncpy(dict, "{", 1);
-            dict += 1;
-            printf("COMPOUND TAG, GOING DEEPER!\n");
-            strncpy(dict, "}", 1);
-            break;
-            
-        case 11: // Int array
-            printf("Length: %d (Int array)", *tag); 
-            break;
+            payload = PyDict_New();
+            printf("--> COMPOUND TAG, GOING DEEPER!\n");
+
+            do // Repeatedly grab tags until an end tag is seen 
+            {
+                printf("GRABBING TAG\n");
+                PyObject * sub_payload;
+                unsigned char sub_tag_id;
+                unsigned char sub_tag_name[1000];
+                int sub_tag_name_length;
+
+                sub_tag_id = *tag;
+                if( sub_tag_id == 0 )
+                    break; // Found the end of our compound tag
+
+                sub_tag_name_length = bytes_to_long(tag + 1, 2);;
+
+                unsigned char * name_buffer[sub_tag_name_length];
+                strncpy(sub_tag_name, tag + 3, sub_tag_name_length);
+                if( sub_tag_name_length == 0 )
+                {
+                    printf("Something is wrong, label missing");
+                    return NULL;
+                }
+
+                printf("Tag ID: %d | Name: %.*s\n", sub_tag_id, sub_tag_name_length, sub_tag_name);
+
+                tag += 3 + sub_tag_name_length;
+                sub_moved = 0;
+                sub_payload = get_tag(tag, sub_tag_id, &sub_moved);
+//                PyDict_SetItemString(payload, sub_tag_name, sub_payload);
+
+                printf("%d bytes\n", sub_moved);
+                tag += sub_moved;
+                
+                *moved += 3 + sub_tag_name_length + sub_moved;
+            }
+            while( true );
+
+            printf("--> END OF COMPOUND TAG");
+            break;           
 
         default:
-            printf("DEFAULT TAG CATCHER");
+            printf("TAG ID: %d | DEFAULT VALUE\n", tag_id);
+            payload = NULL;
             break;
     }
+    return payload;
+}
 
-    printf("\n");
+// Wrapper for get_tag(tag, tag_id)
+PyObject * get_chunk_dict( unsigned char * root )
+{
+    int moved;
+
+    moved = 0;
+    return get_tag(root, -1, &moved);
 }
 
 // Convert a chunk to python dictionary format
-void chunk_to_dict( unsigned char * chunk_buffer, unsigned char * dict )
+void chunk_to_dict( unsigned char * chunk_buffer)
 {
     /*
     root {
           'Level': {
                     'xPos': 1, 'zPos': 2, ...
     */
+    PyObject * dict;
 
-    printf("%x\n", dict);
-    read_tags(dict, chunk_buffer, 0);
-    printf("Now: %x | Dict: %s", dict, dict);
+    dict = get_chunk_dict(chunk_buffer);
 }
 
 int read_chunk( unsigned char * chunk_buffer )
 {
-    unsigned char dict[100000]; // TODO: Make larger
-    
-    chunk_to_dict(chunk_buffer, dict); // just read the first tag for now
+    chunk_to_dict(chunk_buffer); // just read the first tag for now
 
     return 0;
 }
@@ -255,6 +338,8 @@ int main( int argc, char *argv[] )
     FILE *fp;
     unsigned char chunk[1024000];
     int coords[2];
+
+    Py_Initialize();
 
     if ( argc < 2 )
     {
