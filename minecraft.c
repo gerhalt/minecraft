@@ -25,10 +25,10 @@ int CHUNK_INFLATE_MAX = 131072;
 // and returns the integer they represent
 long bytes_to_long( unsigned char * buffer, int bytes )
 {
-    int transform;
+    int i, transform;
 
     transform = 0;
-    for ( int i = 0; i < bytes; i++ )
+    for ( i = 0; i < bytes; i++ )
     {
         transform = buffer[i]<<((bytes - i - 1) * 8) | transform;
     }
@@ -65,7 +65,9 @@ int inf( char * dst, char * src, int bytes )
 // Takes a buffer and prints it prettily
 void dump_buffer(unsigned char * buffer, int count)
 {
-    for ( int i = 0; i < count; i++)
+    int i;
+
+    for ( i = 0; i < count; i++)
     {
         printf("%2x", buffer[i]);
 
@@ -78,7 +80,7 @@ void dump_buffer(unsigned char * buffer, int count)
 
 // Takes a region file stream and a chunk location and finds and decompresses
 // the chunk to the passed buffer
-int get_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int chunkZ )
+int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int chunkZ )
 {
     unsigned int offset, chunk_length, compression_type, rc;
     unsigned char small_buffer[5], compressed_chunk_buffer[1048576];
@@ -128,14 +130,8 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
     switch(tag_id)
     {
         long size;
-        int sub_moved;
+        int i, sub_moved;
         unsigned char list_tag_id;
-
-        case 0:
-            printf("END TAG, SHOULD NOT FIND\n");
-            return NULL;
-
-        // All these need to be converted (from big-endian)
 
         case 1: // Byte
             payload = PyInt_FromLong(bytes_to_long(tag, 1));
@@ -179,7 +175,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
             tag += sizeof(int);
 
             payload = PyList_New(size);
-            for( int i = 0; i < size; i++ )
+            for( i = 0; i < size; i++ )
             {
                 PyObject * integer;
 
@@ -204,7 +200,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
 
             payload = PyList_New(size);
             sub_moved = 0;
-            for( int i = 0; i < size; i++ )
+            for( i = 0; i < size; i++ )
             {
                 PyObject * list_item;
 
@@ -247,7 +243,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
                 tag += 3 + sub_tag_name_length;
                 sub_moved = 0;
                 sub_payload = get_tag(tag, sub_tag_id, &sub_moved);
-//                PyDict_SetItemString(payload, sub_tag_name, sub_payload);
+                PyDict_SetItemString(payload, sub_tag_name, sub_payload);
 
                 printf("%d bytes\n", sub_moved);
                 tag += sub_moved;
@@ -260,7 +256,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
             break;           
 
         default:
-            printf("TAG ID: %d | DEFAULT VALUE\n", tag_id);
+            printf("UNCAUGHT TAG ID: %d\n", tag_id);
             payload = NULL;
             break;
     }
@@ -277,7 +273,7 @@ PyObject * get_chunk_dict( unsigned char * root )
 }
 
 // Convert a chunk to python dictionary format
-void chunk_to_dict( unsigned char * chunk_buffer)
+void chunk_to_dict( unsigned char * chunk_buffer )
 {
     /*
     root {
@@ -287,13 +283,6 @@ void chunk_to_dict( unsigned char * chunk_buffer)
     PyObject * dict;
 
     dict = get_chunk_dict(chunk_buffer);
-}
-
-int read_chunk( unsigned char * chunk_buffer )
-{
-    chunk_to_dict(chunk_buffer); // just read the first tag for now
-
-    return 0;
 }
 
 // Get information from the filename
@@ -332,6 +321,30 @@ void region_information( int *coords, char *filename )
     }
 }
 
+/*
+
+Python Module
+
+*/
+
+static PyObject * get_chunk(PyObject *self, PyObject *args)
+{
+    
+
+
+}
+
+// Method table
+static PyMethodDef MinecraftMethods[] = {
+    {"get_chunk", get_chunk, METH_VARARGS, "Get a specified chunk."},
+    {NULL, NULL, 0, NULL} /* Sentinel */
+};
+
+// Module initialization
+PyMODINIT_FUNC initminecraft(void)
+{
+    (void) Py_InitModule("minecraft", MinecraftMethods);
+}
 
 int main( int argc, char *argv[] )
 {
@@ -355,8 +368,8 @@ int main( int argc, char *argv[] )
 
     if ( fp = fopen(argv[1], "r") )
     {
-        get_chunk(fp, chunk, 0, 5);
-        read_chunk(chunk);
+        decompress_chunk(fp, chunk, 0, 5);
+        chunk_to_dict(chunk);
     }
 
     fclose(fp);
