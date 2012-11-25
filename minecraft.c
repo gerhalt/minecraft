@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <structmember.h>
 #include <regex.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -36,10 +37,9 @@ long bytes_to_long( unsigned char * buffer, int bytes )
 }
 
 // Inflate x bytes of compressed data, using zlib
-int inf( char * dst, char * src, int bytes )
+int inf( unsigned char * dst, unsigned char * src, int bytes )
 {
     int ret;
-    unsigned have;
     z_stream strm;
 
     strm.zalloc = Z_NULL;
@@ -82,7 +82,7 @@ void dump_buffer(unsigned char * buffer, int count)
 // the chunk to the passed buffer
 int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int chunkZ )
 {
-    unsigned int offset, chunk_length, compression_type, rc;
+    unsigned int offset, chunk_length, compression_type;
     unsigned char small_buffer[5], compressed_chunk_buffer[1048576];
 
     printf("Finding chunk (%d, %d)\n", chunkX, chunkZ);
@@ -108,7 +108,7 @@ int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chun
     printf("Compression scheme: %d\n", compression_type);
 
     fread(compressed_chunk_buffer, chunk_length - 1, 1, region_file);
-    rc = inf(chunk_buffer, compressed_chunk_buffer, chunk_length - 1);
+    inf(chunk_buffer, compressed_chunk_buffer, chunk_length - 1);
 
     return 1;
 }
@@ -166,7 +166,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
         case 7: // Byte array
             size = bytes_to_long(tag, sizeof(int));
             printf("Byte array size: %ld\n", size);
-            payload = PyByteArray_FromStringAndSize(tag + sizeof(int), size);
+            payload = PyByteArray_FromStringAndSize((char *) tag + sizeof(int), size);
             *moved += sizeof(int) + size;
             break;
 
@@ -188,7 +188,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
 
         case 8: // String
             size = bytes_to_long(tag, sizeof(short));
-            payload = PyString_FromStringAndSize(tag + sizeof(short), size);
+            payload = PyString_FromStringAndSize((char *) tag + sizeof(short), size);
             *moved += sizeof(short) + size;
             break;
 
@@ -221,7 +221,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
                 printf("GRABBING TAG\n");
                 PyObject * sub_payload;
                 unsigned char sub_tag_id;
-                unsigned char sub_tag_name[1000];
+                char sub_tag_name[1000]; // TODO: Non-dynamic length
                 int sub_tag_name_length;
 
                 sub_tag_id = *tag;
@@ -231,7 +231,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
                 sub_tag_name_length = bytes_to_long(tag + 1, 2);;
 
                 unsigned char * name_buffer[sub_tag_name_length];
-                strncpy(sub_tag_name, tag + 3, sub_tag_name_length);
+                strncpy(sub_tag_name, (char *) tag + 3, sub_tag_name_length);
                 if( sub_tag_name_length == 0 )
                 {
                     printf("Something is wrong, label missing");
@@ -321,11 +321,99 @@ void region_information( int *coords, char *filename )
     }
 }
 
-/*
 
+
+/*
 Python Module
 
+This covers things like the object and module definitions, and the entry 
+methods themselves.
+
+World
+-----
+- init(self, path)
+- get_chunk(self, chunk_x, chunk_z)
+- save_chunk(self, chunk)
+    * will contain logic to create region file, if the chunk is part of a
+      region that hasn't already been generated.  This isn't complex, so
+      I don't feel that it justifies creating a seperate Region object.
+
+Chunk
+-----
+chunk_x, chunkz
+- init(self, chunkX, chunkZ)
+- TO BE EXPANDED...
 */
+
+/* CHUNK */
+typedef struct {
+    PyObject_HEAD
+    int chunk_x, chunk_z;
+} Chunk;
+
+static void Chunk_dealloc( Chunk *self )
+{
+    // decrement references to PyObject *'s
+    self->ob_type->tp_free((PyObject *) self);
+}
+
+static int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
+{
+    if( !PyArg_ParseTuple(args, "ii", &self->chunk_x, &self->chunk_z) )
+        return -1;
+}
+
+static PyMemberDef Chunk_members[] = {
+    {"chunk_x", T_INT, offsetof(Chunk, chunk_x), 0, "Chunk X"},
+    {"chunk_z", T_INT, offsetof(Chunk, chunk_z), 0, "Chunk Z"},
+    {NULL}
+};
+
+static PyMethodDef Chunk_methods[] = {
+    {NULL}
+};
+
+static PyTypeObject minecraft_ChunkType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "minecraft.Chunk",         /*tp_name*/
+    sizeof(Chunk),             /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)Chunk_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "Chunk objects",           /* tp_doc */
+    0,                     /* tp_traverse */
+    0,                     /* tp_clear */
+    0,                     /* tp_richcompare */
+    0,                     /* tp_weaklistoffset */
+    0,                     /* tp_iter */
+    0,                     /* tp_iternext */
+    Chunk_methods,             /* tp_methods */
+    Chunk_members,             /* tp_members */
+    0,                         /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)Chunk_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    0,                         /* tp_new */
+};
 
 static PyObject * get_chunk(PyObject *self, PyObject *args)
 {
@@ -343,7 +431,16 @@ static PyMethodDef MinecraftMethods[] = {
 // Module initialization
 PyMODINIT_FUNC initminecraft(void)
 {
-    (void) Py_InitModule("minecraft", MinecraftMethods);
+    PyObject *m;
+    
+    minecraft_ChunkType.tp_new = PyType_GenericNew;
+    if( PyType_Ready(&minecraft_ChunkType) < 0 )
+        return;
+
+    m = Py_InitModule3("minecraft", MinecraftMethods, "Minecraft module");
+
+    Py_INCREF(&minecraft_ChunkType);
+    PyModule_AddObject(m, "Chunk", (PyObject *) &minecraft_ChunkType);
 }
 
 int main( int argc, char *argv[] )
@@ -373,5 +470,7 @@ int main( int argc, char *argv[] )
     }
 
     fclose(fp);
+
+    return 0;
 }
 

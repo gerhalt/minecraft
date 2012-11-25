@@ -13,5 +13,7 @@ minecraft_base = Extension('minecraft',
 setup (name = 'Minecraft',
        version = '1.0',
        description = 'This is a demo package',
-       ext_modules = [minecraft_base])
+       ext_modules = [
+            Extension("minecraft", ["minecraft.c"])
+       ])
 
