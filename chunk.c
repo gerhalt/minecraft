@@ -1,3 +1,9 @@
+/*
+chunk.c - Chunk definition
+
+Provides functionality for Chunk objects
+*/
+
 #include <Python.h>
 #include <structmember.h>
 #include <stdbool.h>
@@ -164,7 +170,7 @@ PyObject * chunk_to_dict( unsigned char * chunk_buffer )
 
 /*
 
-Chunk definition
+Python object-related code
 
 */
 void Chunk_dealloc( Chunk *self )
