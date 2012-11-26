@@ -8,7 +8,7 @@ Building the C extension
 from distutils.core import setup, Extension
 
 minecraft_base = Extension('minecraft',
-                           sources = ['minecraft.c'])
+                           sources = ['minecraft.c', 'chunk.c'])
 
 setup (name = 'Minecraft',
        version = '1.0',
