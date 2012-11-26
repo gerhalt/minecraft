@@ -167,11 +167,17 @@ PyMODINIT_FUNC initminecraft(void)
     minecraft_ChunkType.tp_new = PyType_GenericNew;
     if( PyType_Ready(&minecraft_ChunkType) < 0 )
         return;
+    
+    minecraft_WorldType.tp_new = PyType_GenericNew;
+    if( PyType_Ready(&minecraft_WorldType) < 0 )
+        return;
 
     m = Py_InitModule3("minecraft", MinecraftMethods, "Minecraft module");
 
     Py_INCREF(&minecraft_ChunkType);
     PyModule_AddObject(m, "Chunk", (PyObject *) &minecraft_ChunkType);
+    Py_INCREF(&minecraft_WorldType);
+    PyModule_AddObject(m, "World", (PyObject *) &minecraft_WorldType);
 }
 
 int main( int argc, char *argv[] )
