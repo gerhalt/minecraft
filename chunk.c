@@ -167,12 +167,7 @@ PyObject * chunk_to_dict( unsigned char * chunk_buffer )
 Chunk definition
 
 */
-typedef struct {
-    PyObject_HEAD
-    int chunk_x, chunk_z;
-} Chunk;
-
-static void Chunk_dealloc( Chunk *self )
+void Chunk_dealloc( Chunk *self )
 {
     // decrement references to PyObject *'s
     self->ob_type->tp_free((PyObject *) self);

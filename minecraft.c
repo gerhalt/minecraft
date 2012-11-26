@@ -150,17 +150,15 @@ void region_information( int *coords, char *filename )
     }
 }
 
-// Method table
+/*
+
+Python module set-up
+
+*/
 static PyMethodDef MinecraftMethods[] = {
 //    {"get_chunk", get_chunk, METH_VARARGS, "Get a specified chunk."},
     {NULL, NULL, 0, NULL} /* Sentinel */
 };
-
-/*
-
-Python Module Set-Up
-
-*/
 
 PyMODINIT_FUNC initminecraft(void)
 {
