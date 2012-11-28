@@ -1,7 +1,7 @@
 /*
-chunk.c - Chunk definition
+chunk.c
 
-Provides functionality for Chunk objects
+Chunk object definition and functionality
 */
 
 #include <Python.h>
@@ -16,22 +16,73 @@ Python object-related code
 */
 void World_dealloc( World *self )
 {
-    // decrement references to PyObject *'s
+    Py_XDECREF(self->level);
     self->ob_type->tp_free((PyObject *) self);
 }
 
 static int World_init( World *self, PyObject *args, PyObject *kwds )
 {
-    char * tmp;
+    FILE * fp;
+    char * tmp, filename[1000];
+    unsigned char * src, * dst;
 
     if( !PyArg_ParseTuple(args, "s", &tmp) )
        return -1;
 
+    sprintf(filename, "%s/level.dat", tmp);
+    fp = fopen(filename, "rb");
+    if( fp != NULL )
+    {
+        PyObject * level, * old_level;
+        int size, moved, rc;
+        struct stat stbuf;
+
+        src = calloc(10000, 1);
+        dst = calloc(10000, 1);
+
+        rc = fstat(fileno(fp), &stbuf); 
+        if( rc != 0 )
+            PyErr_Format(PyExc_Exception, "Unable to stat level.dat file");
+
+        fstat(fileno(fp), &stbuf);
+        size = stbuf.st_size;
+        printf("Size is: %d\n", size);
+
+        fread(src, 1, size, fp);
+        dump_buffer(src, 600);
+
+        inf(dst, src, size);
+
+        dump_buffer(dst, 600);
+ 
+        printf("DECOMPRESSED FILE!");
+
+        moved = 0;
+        level = get_tag(dst, -1, &moved);
+
+        old_level = self->level;
+        Py_INCREF(level);
+        self->level = level;
+        Py_XDECREF(old_level);
+
+        free(src);
+        free(dst);
+        fclose(fp);
+    }
+    else
+    {
+        PyErr_Format(PyExc_Exception, "Unable to open level.dat file");
+        return -1;
+    }
+
     self->path = tmp;
+
+    return 0;
 }
 
 static PyMemberDef World_members[] = {
     {"path", T_STRING, offsetof(World, path), 0, "Path to the base minecraft world directory"},
+    {"level", T_OBJECT, offsetof(World, level), 0, "Dictionary containing level.dat attributes"},
     {NULL}
 };
 

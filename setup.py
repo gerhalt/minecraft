@@ -11,6 +11,6 @@ setup (name = 'Minecraft',
        version = '1.0',
        description = 'This is a demo package',
        ext_modules = [
-            Extension("minecraft", sources = ["minecraft.c", "chunk.c", "world.c"])
+            Extension("minecraft", sources = ["minecraft.c", "chunk.c", "nbt.c", "world.c"])
        ])
 
