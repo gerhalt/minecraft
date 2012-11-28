@@ -42,20 +42,16 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
 
         rc = fstat(fileno(fp), &stbuf); 
         if( rc != 0 )
+        {
             PyErr_Format(PyExc_Exception, "Unable to stat level.dat file");
+            return -1;
+        }
 
         fstat(fileno(fp), &stbuf);
         size = stbuf.st_size;
-        printf("Size is: %d\n", size);
 
         fread(src, 1, size, fp);
-        dump_buffer(src, 600);
-
         inf(dst, src, size);
-
-        dump_buffer(dst, 600);
- 
-        printf("DECOMPRESSED FILE!");
 
         moved = 0;
         level = get_tag(dst, -1, &moved);
