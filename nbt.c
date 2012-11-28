@@ -52,9 +52,37 @@ int inf( unsigned char * dst, unsigned char * src, int bytes )
     inflateEnd(&strm);
     
     if ( ret != Z_STREAM_END )
-    {
         PyErr_Format(PyExc_Exception, "Unable to decompress (RC: %d | Error: %s)", ret, strm.msg);
-    }
+
+    return ret;
+}
+
+// Deflate, using the same idea as the "inflate" function
+int def( unsigned char * dst, unsigned char * src, int bytes )
+{
+    int ret;
+    z_stream strm;
+
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+
+    strm.next_out = dst;
+    strm.avail_out = CHUNK_INFLATE_MAX;
+    strm.next_in = src;
+    strm.avail_in = bytes;
+
+    deflateInit2(&strm, 
+                 Z_DEFAULT_COMPRESSION,
+                 Z_DEFLATED, 
+                 MAX_WBITS + 16,
+                 8,
+                 Z_DEFAULT_STRATEGY); // + 16 bits for simple gzip header
+    ret = deflate(&strm, Z_FINISH);
+    deflateEnd(&strm);
+    
+    if ( ret != Z_STREAM_END )
+        PyErr_Format(PyExc_Exception, "Unable to compress (RC: %d | Error: %s)", ret, strm.msg);
 
     return ret;
 }

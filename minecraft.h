@@ -26,7 +26,10 @@ PyTypeObject minecraft_ChunkType;
 
 // minecraft.c
 long bytes_to_long( unsigned char * buffer, int bytes );
+
+// nbt.c
 int inf( unsigned char * dst, unsigned char * src, int bytes );
+int def( unsigned char * dst, unsigned char * src, int bytes );
 PyObject * get_tag( unsigned char * tag, char tag_id, int * moved ); 
 
 // world.c
