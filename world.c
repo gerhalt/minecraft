@@ -51,7 +51,7 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
         size = stbuf.st_size;
 
         fread(src, 1, size, fp);
-        inf(dst, src, size);
+        inf(dst, src, size, 1);
 
         moved = 0;
         level = get_tag(dst, -1, &moved);
@@ -76,6 +76,20 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
     return 0;
 }
 
+// Right now, just save out level.dat
+static PyObject * World_save( World *self )
+{
+    unsigned char * dst;
+
+    dst = calloc(10000, 1);
+    write_tags(dst, self->level);
+
+    free(dst);
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 static PyMemberDef World_members[] = {
     {"path", T_STRING, offsetof(World, path), 0, "Path to the base minecraft world directory"},
     {"level", T_OBJECT, offsetof(World, level), 0, "Dictionary containing level.dat attributes"},
@@ -83,6 +97,7 @@ static PyMemberDef World_members[] = {
 };
 
 static PyMethodDef World_methods[] = {
+    {"save", (PyCFunction) World_save, METH_NOARGS, "Save the world! (out to files, anyway)"},
     {NULL}
 };
 

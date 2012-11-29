@@ -12,6 +12,61 @@ Decompression and NBT reading utilities
 #include "minecraft.h"
 #include "zlib.h"
 
+typedef struct TagType{
+    char * name;
+    int tag_id;
+} TagType;
+
+// TODO: This may not be the best place to put this
+#define TAG_END         0
+#define TAG_BYTE        1
+#define TAG_SHORT       2
+#define TAG_INT         3
+#define TAG_LONG        4
+#define TAG_FLOAT       5
+#define TAG_DOUBLE      6
+#define TAG_BYTE_ARRAY  7
+#define TAG_STRING      8
+#define TAG_LIST        9
+#define TAG_COMPOUND    10
+#define TAG_INT_ARRAY   11
+
+static TagType leveldat_tags[] = {
+    {"Data", TAG_COMPOUND},
+    {"version", TAG_INT},
+    {"initialized", TAG_BYTE},
+    {"LevelName", TAG_STRING},
+    {"generatorName", TAG_STRING},
+    {"generatorVersion", TAG_INT},
+    {"generatorOptions", TAG_STRING},
+    {"RandomSeed", TAG_LONG},
+    {"MapFeatures", TAG_BYTE},
+    {"LastPlayed", TAG_LONG},
+    {"SizeOnDisk", TAG_LONG},
+    {"allowCommands", TAG_BYTE},
+    {"hardcore", TAG_BYTE},
+    {"GameType", TAG_INT},
+    {"Time", TAG_LONG},
+    {"DayTime", TAG_LONG},
+    {"SpawnX", TAG_INT},
+    {"SpawnY", TAG_INT},
+    {"SpawnZ", TAG_INT},
+    {"raining", TAG_BYTE},
+    {"rainTime", TAG_INT},
+    {"thundering", TAG_BYTE},
+    {"thunderTime", TAG_INT},
+    {"Player", TAG_COMPOUND},
+    {"GameRules", TAG_COMPOUND},
+    {"commandBlockOutput", TAG_STRING},
+    {"doFireTick", TAG_STRING},
+    {"doMobLoot", TAG_STRING},
+    {"doMobSpawning", TAG_STRING},
+    {"doTileDrops", TAG_STRING},
+    {"keepInventory", TAG_STRING},
+    {"mobGriefing", TAG_STRING},
+    {NULL, NULL} // Sentinel
+};
+
 // Takes a buffer and prints it prettily
 void dump_buffer(unsigned char * buffer, int count)
 {
@@ -32,8 +87,16 @@ void dump_buffer(unsigned char * buffer, int count)
     printf("\n");
 }
 
-// Inflate x bytes of compressed data, using zlib
-int inf( unsigned char * dst, unsigned char * src, int bytes )
+/*
+Inflate
+  * dst - destination
+  * src - source
+  bytes - number of bytes in the inflation buffer
+  mode  - compression mode to read
+    0   - normal (zlib)
+    1   - gzip (including headers)
+*/
+int inf( unsigned char * dst, unsigned char * src, int bytes, int mode )
 {
     int ret;
     z_stream strm;
@@ -47,7 +110,7 @@ int inf( unsigned char * dst, unsigned char * src, int bytes )
     strm.next_in = src;
     strm.avail_in = bytes;
 
-    inflateInit2(&strm, MAX_WBITS + 32); // + 32 bits for header detection and gzip
+    inflateInit2(&strm, MAX_WBITS + mode * 32); // + 32 bits for header detection and gzip
     ret = inflate(&strm, Z_FINISH);
     inflateEnd(&strm);
     
@@ -57,8 +120,16 @@ int inf( unsigned char * dst, unsigned char * src, int bytes )
     return ret;
 }
 
-// Deflate, using the same idea as the "inflate" function
-int def( unsigned char * dst, unsigned char * src, int bytes )
+/*
+Deflate
+  * dst - destination
+  * src - source
+  bytes - number of bytes in the deflate buffer
+  mode  - compression mode to use
+    0   - normal (zlib)
+    1   - gzip (including headers)
+*/
+int def( unsigned char * dst, unsigned char * src, int bytes, int mode )
 {
     int ret;
     z_stream strm;
@@ -75,9 +146,9 @@ int def( unsigned char * dst, unsigned char * src, int bytes )
     deflateInit2(&strm, 
                  Z_DEFAULT_COMPRESSION,
                  Z_DEFLATED, 
-                 MAX_WBITS + 16,
+                 MAX_WBITS + mode * 16,  // + 16 bits for simple gzip header
                  8,
-                 Z_DEFAULT_STRATEGY); // + 16 bits for simple gzip header
+                 Z_DEFAULT_STRATEGY);
     ret = deflate(&strm, Z_FINISH);
     deflateEnd(&strm);
     
@@ -117,7 +188,7 @@ int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chun
     printf("Compression scheme: %d\n", compression_type);
 
     fread(compressed_chunk_buffer, chunk_length - 1, 1, region_file);
-    inf(chunk_buffer, compressed_chunk_buffer, chunk_length - 1);
+    inf(chunk_buffer, compressed_chunk_buffer, chunk_length - 1, 0);
 
     return 1;
 }
@@ -274,6 +345,58 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
     return payload;
 }
 
+// TODO: Going to ignore buffer size right now, but this isn't right
+int write_tags( unsigned char * dst, PyObject * dict )
+{
+    PyObject * keys;
+    int i, size;
+
+    keys = PyDict_Keys(dict);
+    Py_INCREF(keys);
+
+    size = PyList_Size(keys);
+    for( i = 0; i < size; i++ )
+    {
+        PyObject * key, * value;
+        char * keystr;
+        int i, tag_id;
+
+        key = PyList_GetItem(keys, i); // Known to be a PyString
+        value = PyDict_GetItem(dict, key);
+
+        keystr = PyString_AsString(key);
+        printf("Key: %s\n", keystr);
+
+        tag_id = -1;
+        // Check if tag name is valid, and what it's type is
+        for( i = 0;; i++ )
+        {
+            struct TagType tag_type;
+
+            printf("%d\n", i);
+
+            tag_type = leveldat_tags[i];
+            if( tag_type.name == NULL)
+                break;
+
+            printf("KEY: %s| NAME: %s | TAG_ID: %d\n", keystr, tag_type.name, tag_type.tag_id);
+            if( strcmp(tag_type.name, keystr) == 0 )
+            {
+                tag_id = tag_type.tag_id;
+                break;
+            }
+        }
+
+        if( tag_id == -1 )
+            printf("NO TAG ID\n");
+        else
+            printf("TAG ID: %d\n", tag_id);
+    }
+
+    Py_DECREF(keys);
+    return 0;
+}
+
 // For testing
 int main( int argc, char *argv[] )
 {
@@ -308,7 +431,7 @@ int main( int argc, char *argv[] )
         fread(src, 1, size, fp);
         dump_buffer(src, 600);
 
-        inf(dst, src, size);
+        inf(dst, src, size, 1);
 
         dump_buffer(dst, 600);
     }

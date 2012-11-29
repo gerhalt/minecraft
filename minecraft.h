@@ -28,9 +28,10 @@ PyTypeObject minecraft_ChunkType;
 long bytes_to_long( unsigned char * buffer, int bytes );
 
 // nbt.c
-int inf( unsigned char * dst, unsigned char * src, int bytes );
-int def( unsigned char * dst, unsigned char * src, int bytes );
-PyObject * get_tag( unsigned char * tag, char tag_id, int * moved ); 
+int inf( unsigned char * dst, unsigned char * src, int bytes, int mode );
+int def( unsigned char * dst, unsigned char * src, int bytes, int mode );
+PyObject * get_tag( unsigned char * tag, char tag_id, int * moved );
+int write_tags( unsigned char * dst, PyObject * dict ); 
 
 // world.c
 PyTypeObject minecraft_WorldType;
