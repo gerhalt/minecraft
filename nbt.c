@@ -14,7 +14,7 @@ Decompression and NBT reading utilities
 
 typedef struct TagType{
     char * name;
-    int tag_id;
+    int id;
 } TagType;
 
 // TODO: This may not be the best place to put this
@@ -195,54 +195,54 @@ int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chun
 
 // Given a pointer to a payload, return a PyObject representing that payload
 // moved will be modified by the amount the tag pointer shifted
-PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
+PyObject * get_tag( unsigned char * tag, char id, int * moved )
 {
     PyObject * payload;
 
-    // The only time the tag_id should be -1 is if the root is passed in
-    if( tag_id == -1 )
+    // The only time the id should be -1 is if the root is passed in
+    if( id == -1 )
     {
-        tag_id = tag[0];
+        id = tag[0];
         tag += 3; // Skip the length of the tag, since we know it to be 0
     }
 
-    switch(tag_id)
+    switch(id)
     {
         long size;
         int i, sub_moved;
-        unsigned char list_tag_id;
+        unsigned char list_id;
 
-        case 1: // Byte
+        case TAG_BYTE: // Byte
             payload = PyInt_FromLong(bytes_to_long(tag, 1));
             *moved += sizeof(char);
             break;
 
-        case 2: // Short
+        case TAG_SHORT: // Short
             payload = PyInt_FromLong(bytes_to_long(tag, sizeof(short)));
             *moved += sizeof(short);
             break;
 
-        case 3: // Int
+        case TAG_INT: // Int
             payload = PyInt_FromLong(bytes_to_long(tag, sizeof(int)));
             *moved += sizeof(int);
             break;
 
-        case 4: // Long
+        case TAG_LONG: // Long
             payload = PyInt_FromLong(bytes_to_long(tag, sizeof(long)));
             *moved += sizeof(long);
             break;
 
-        case 5: // Float
+        case TAG_FLOAT: // Float
             payload = PyFloat_FromDouble((double) bytes_to_long(tag, sizeof(float)));
             *moved += sizeof(float);
             break;
 
-        case 6: // Double
+        case TAG_DOUBLE: // Double
             payload = PyFloat_FromDouble((double) bytes_to_long(tag, sizeof(double)));
             *moved += sizeof(double);
             break;
 
-        case 7: // Byte array
+        case TAG_BYTE_ARRAY: // Byte array
             size = bytes_to_long(tag, sizeof(int));
             tag += sizeof(int);
 
@@ -250,7 +250,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
             *moved += sizeof(int) + size;
             break;
 
-        case 11: // Int array
+        case TAG_INT_ARRAY: // Int array
             size = bytes_to_long(tag, sizeof(int));
             tag += sizeof(int);
 
@@ -266,7 +266,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
             *moved += sizeof(int) * (size + 1);
             break;
 
-        case 8: // String
+        case TAG_STRING: // String
             size = bytes_to_long(tag, sizeof(short));
             tag += sizeof(short);
 
@@ -282,8 +282,8 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
             *moved += sizeof(short) + size;
             break;
 
-        case 9: // List
-            list_tag_id = tag[0];
+        case TAG_LIST: // List
+            list_id = tag[0];
             size = bytes_to_long(tag + 1, sizeof(int));
             tag += 1 + sizeof(int);
 
@@ -293,27 +293,27 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
             {
                 PyObject * list_item;
 
-                list_item = get_tag(tag, list_tag_id, &sub_moved);
+                list_item = get_tag(tag, list_id, &sub_moved);
                 PyList_SET_ITEM(payload, i, list_item);
                 tag += sub_moved;
             }
             *moved += 5 + sub_moved;
             break;
 
-        case 10: // Compound
+        case TAG_COMPOUND: // Compound
             payload = PyDict_New();
             do // Repeatedly grab tags until an end tag is seen 
             {
                 PyObject * sub_payload;
-                unsigned char sub_tag_id;
+                unsigned char sub_id;
                 char * sub_tag_name;
                 int sub_tag_name_length;
 
-                sub_tag_id = *tag;
-                if( sub_tag_id == 0 )
+                sub_id = *tag;
+                if( sub_id == 0 )
                     break; // Found the end of our compound tag
 
-                sub_tag_name_length = bytes_to_long(tag + 1, 2);;
+                sub_tag_name_length = bytes_to_long(tag + 1, 2);
 
                 // This should never happen, but the check doesn't hurt
                 if( sub_tag_name_length == 0 )
@@ -321,11 +321,11 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
 
                 sub_tag_name = calloc(sub_tag_name_length + 1, 1);
                 strncpy(sub_tag_name, (char *) tag + 3, sub_tag_name_length);
-                // printf("Tag ID: %d | Name: %.*s\n", sub_tag_id, sub_tag_name_length, sub_tag_name);
+                // printf("Tag ID: %d | Name: %.*s\n", sub_id, sub_tag_name_length, sub_tag_name);
 
                 tag += 3 + sub_tag_name_length;
                 sub_moved = 0;
-                sub_payload = get_tag(tag, sub_tag_id, &sub_moved);
+                sub_payload = get_tag(tag, sub_id, &sub_moved);
                 PyDict_SetItemString(payload, sub_tag_name, sub_payload);
 
                 tag += sub_moved;
@@ -337,7 +337,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
             break;           
 
         default:
-            printf("UNCAUGHT TAG ID: %d\n", tag_id);
+            printf("UNCAUGHT TAG ID: %d\n", id);
             return NULL;
     }
 
@@ -346,7 +346,7 @@ PyObject * get_tag( unsigned char * tag, char tag_id, int * moved )
 }
 
 // TODO: Going to ignore buffer size right now, but this isn't right
-int write_tags( unsigned char * dst, PyObject * dict )
+int write_tags( unsigned char * dst, PyObject * dict, int * moved )
 {
     PyObject * keys;
     int i, size;
@@ -354,43 +354,157 @@ int write_tags( unsigned char * dst, PyObject * dict )
     keys = PyDict_Keys(dict);
     Py_INCREF(keys);
 
-    size = PyList_Size(keys);
+    size = PyDict_Size(dict);
+    printf("size: %d\n", size);
     for( i = 0; i < size; i++ )
     {
         PyObject * key, * value;
         char * keystr;
-        int i, tag_id;
+        int j, len;
+        struct TagType tag_info;
 
         key = PyList_GetItem(keys, i); // Known to be a PyString
         value = PyDict_GetItem(dict, key);
-
         keystr = PyString_AsString(key);
-        printf("Key: %s\n", keystr);
 
-        tag_id = -1;
-        // Check if tag name is valid, and what it's type is
-        for( i = 0;; i++ )
+        // Match the tag name to a tag type
+        for( j = 0;; j++ )
         {
-            struct TagType tag_type;
-
-            printf("%d\n", i);
-
-            tag_type = leveldat_tags[i];
-            if( tag_type.name == NULL)
-                break;
-
-            printf("KEY: %s| NAME: %s | TAG_ID: %d\n", keystr, tag_type.name, tag_type.tag_id);
-            if( strcmp(tag_type.name, keystr) == 0 )
+            tag_info = leveldat_tags[j];
+            if( tag_info.name == NULL)
             {
-                tag_id = tag_type.tag_id;
-                break;
+                PyErr_Format(PyExc_Exception, "\'%s\' is not a valid tag name", keystr);
+                return -1;
             }
+
+            if( strcmp(tag_info.name, keystr) == 0 )
+                break;
         }
 
-        if( tag_id == -1 )
-            printf("NO TAG ID\n");
-        else
-            printf("TAG ID: %d\n", tag_id);
+        printf("KEY: %s | NAME: %s | TAG_ID: %d\n", keystr, tag_info.name, tag_info.id);
+
+        // Write the tag header
+        len = strlen(tag_info.name);
+        memcpy(dst, &tag_info.id, 1); // TODO: Might not be right, due to endianness
+        memcpy(dst + 1, &len, 2);
+        memcpy(dst + 3 , tag_info.name, len);
+
+        dst += 3 + len;
+        *moved += 3 + len;
+        switch( tag_info.id )
+        {
+            long long_tmp;
+            double double_tmp;
+            char * byte_array_tmp;
+            int k, size, sub_moved;
+
+            case TAG_BYTE:
+                long_tmp = PyInt_AsLong(value);
+                memcpy(dst, &long_tmp, 1);
+                dst += 1;
+                *moved += 1;
+                break;
+
+            case TAG_SHORT:
+                long_tmp = PyInt_AsLong(value);
+                memcpy(dst, &long_tmp, sizeof(short));
+                dst += sizeof(short);
+                *moved += sizeof(short);
+                break;
+
+            case TAG_INT:
+                long_tmp = PyInt_AsLong(value);
+                memcpy(dst, &long_tmp, sizeof(int));
+                dst += sizeof(int);
+                *moved += sizeof(int);
+                break;
+
+            case TAG_LONG:
+                long_tmp = PyInt_AsLong(value);
+                memcpy(dst, &long_tmp, sizeof(long));
+                dst += sizeof(long);
+                *moved += sizeof(long);
+                break;
+
+            case TAG_FLOAT:
+                double_tmp = PyFloat_AsDouble(value);
+                memcpy(dst, &double_tmp, sizeof(float));
+                dst += sizeof(float);
+                *moved += sizeof(float);
+                break;
+
+            case TAG_DOUBLE:
+                double_tmp = PyFloat_AsDouble(value);
+                memcpy(dst, &double_tmp, sizeof(double));
+                dst += sizeof(double);
+                *moved += sizeof(double);
+                break;
+
+            case TAG_BYTE_ARRAY:
+                size = PyByteArray_Size(value);
+                memcpy(dst, &size, sizeof(int));
+
+                byte_array_tmp = PyByteArray_AsString(value);
+                memcpy(dst + sizeof(int), byte_array_tmp, size);
+
+                dst += sizeof(int) + size;
+                *moved += size;
+                break;
+
+            case TAG_INT_ARRAY:
+                size = PyList_Size(value);
+                memcpy(dst, &size, sizeof(int));
+                dst += sizeof(int);
+
+                for( k = 0; k < size; k++ )
+                {
+                    long_tmp = PyInt_AsLong(PyList_GetItem(value, k));
+                    memcpy(dst, &long_tmp, sizeof(int));
+                    dst += sizeof(int);
+                }
+
+                *moved += sizeof(int) * (size + 1);
+                break;
+
+            case TAG_STRING:
+                // Special case, where a 'true' or 'false' has been changed
+                // to a Python boolean object
+                if( value == Py_True )
+                    memcpy(dst, "true", 4);
+                else if( value == Py_False )
+                    memcpy(dst, "false", 5);
+                else
+                {
+                    size = PyString_Size(value);
+                    memcpy(dst, &size, sizeof(short));
+                    dst += sizeof(short);
+
+                    byte_array_tmp = PyString_AsString(value);
+                    printf("STRING %p | %d\n", byte_array_tmp, size);
+                    memcpy(dst, byte_array_tmp, 1);
+
+                    dst += size;
+                    *moved += sizeof(short) + size; 
+                }
+                break;
+
+            case TAG_LIST:
+                printf("TAG LIST, NOT IMPLEMENTED");
+                break;
+
+            case TAG_COMPOUND:
+                sub_moved = 0;
+                write_tags(dst, value, &sub_moved);
+                memset(dst + sub_moved, 0, 1); // Write TAG_END
+
+                dst += sub_moved;
+                *moved += sub_moved + 1;
+                break;
+
+            default:
+                PyErr_Format(PyExc_Exception, "\'%d\' is not a valid tag ID", tag_info.id);
+                break;
+        }
     }
 
     Py_DECREF(keys);

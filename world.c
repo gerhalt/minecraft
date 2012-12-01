@@ -53,6 +53,9 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
         fread(src, 1, size, fp);
         inf(dst, src, size, 1);
 
+        printf("\n\nOriginal, unpacked data:\n");
+        dump_buffer(dst, 200);
+
         moved = 0;
         level = get_tag(dst, -1, &moved);
 
@@ -80,9 +83,12 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
 static PyObject * World_save( World *self )
 {
     unsigned char * dst;
+    int moved;
 
     dst = calloc(10000, 1);
-    write_tags(dst, self->level);
+    moved = 0;
+    write_tags(dst, self->level, &moved);
+    dump_buffer(dst, 200);
 
     free(dst);
 
