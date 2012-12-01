@@ -15,6 +15,8 @@ Decompression and NBT reading utilities
 typedef struct TagType{
     char * name;
     int id;
+    int size;   // Optional, for List and Array tags
+    int sub_id; // Optional, for List tag
 } TagType;
 
 // TODO: This may not be the best place to put this
@@ -405,14 +407,15 @@ int write_tags( unsigned char * dst, PyObject * dict )
 }
 
 
-int write_tags_payload( unsigned char * dst, int tag_id, PyObject * payload, int * moved )
+int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payload, int * moved )
 {
-    switch( tag_id )
+    switch(tag_info.id)
     {
         long long_tmp;
         double double_tmp;
         char * byte_array_tmp;
         int k, size, sub_moved;
+        char sub_tag_id;
 
         case TAG_BYTE:
             long_tmp = PyInt_AsLong(payload);
@@ -510,7 +513,7 @@ int write_tags_payload( unsigned char * dst, int tag_id, PyObject * payload, int
             break;
 
         case TAG_LIST:
-            // TODO: MAKE THIS WORK :D
+            sub_tag_id = *dst;
 
 
 
@@ -529,7 +532,7 @@ int write_tags_payload( unsigned char * dst, int tag_id, PyObject * payload, int
             break;
 
         default:
-            PyErr_Format(PyExc_Exception, "\'%d\' is not a valid tag ID", tag_id);
+            PyErr_Format(PyExc_Exception, "\'%d\' is not a valid tag ID", tag_info.id);
             break;
     }
 }
@@ -580,7 +583,7 @@ int write_tags_header( unsigned char * dst, PyObject * dict, int * moved )
 
         // Write the tag
         sub_moved = 0;
-        write_tags_payload(dst + 3 + len, tag_info.id, value, &sub_moved);
+        write_tags_payload(dst + 3 + len, tag_info, value, &sub_moved);
 
         dst += 3 + len + sub_moved;
         *moved += 3 + len + sub_moved;
