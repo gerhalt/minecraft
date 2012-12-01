@@ -13,20 +13,6 @@ Core module definition plus functionality that doesn't really fit anywhere else
 #include <string.h>
 #include "minecraft.h"
 
-// Takes a number of bytes (in big-endian order), starting at a given location,
-// and returns the integer they represent
-long bytes_to_long( unsigned char * buffer, int bytes )
-{
-    int i, transform;
-
-    transform = 0;
-    for ( i = 0; i < bytes; i++ )
-    {
-        transform = buffer[i]<<((bytes - i - 1) * 8) | transform;
-    }
-    return transform;
-}
-
 // Get information from the filename
 void region_information( int *coords, char *filename )
 {

@@ -86,8 +86,7 @@ static PyObject * World_save( World *self )
     int moved;
 
     dst = calloc(10000, 1);
-    moved = 0;
-    write_tags(dst, self->level, &moved);
+    write_tags(dst, self->level);
     dump_buffer(dst, 200);
 
     free(dst);

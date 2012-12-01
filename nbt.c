@@ -67,12 +67,47 @@ static TagType leveldat_tags[] = {
     {NULL, NULL} // Sentinel
 };
 
+// Takes a number of bytes (in big-endian order), starting at a given location,
+// and returns the integer they represent
+long swap_endianness( unsigned char * buffer, int bytes )
+{
+    long transform;
+    int i;
+
+    transform = 0;
+    for( i = 0; i < bytes; i++ )
+    {
+        transform = buffer[i]<<((bytes - i - 1) * 8) | transform;
+    }
+    return transform;
+}
+
+void swap_endianness_in_memory( unsigned char * buffer, int bytes )
+{
+    unsigned char * end;
+
+    end = buffer + bytes - 1;
+    while( buffer < end )
+    {
+        unsigned char tmp;
+ 
+//        printf("Swapping %x and %x\n", *buffer, *end);
+        tmp = *buffer;
+        *buffer = *end;
+        *end = tmp;
+//        printf("Now %x and %x\n", *buffer, *end);
+
+        buffer++;
+        end--;
+    }
+}
+
 // Takes a buffer and prints it prettily
 void dump_buffer(unsigned char * buffer, int count)
 {
     int i;
 
-    for ( i = 0; i < count; i++)
+    for( i = 0; i < count; i++)
     {
         if ( i % 16 == 0 )
             printf(" %4i ", i); 
@@ -169,7 +204,7 @@ int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chun
     fseek(region_file, 4 * ((chunkX & 31) + (chunkZ & 31) * 32), SEEK_SET);
     fread(small_buffer, 4, 1, region_file);
 
-    offset = bytes_to_long(small_buffer, 3) * 4096;
+    offset = swap_endianness(small_buffer, 3) * 4096;
     if ( offset == 0 )
     {
         //printf("Chunk is empty!\n");
@@ -182,8 +217,8 @@ int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chun
     fseek(region_file, offset, SEEK_SET);
     memset(small_buffer, 0, 5);
     fread(small_buffer, 5, 1, region_file);
-    chunk_length = bytes_to_long(small_buffer, 4);
-    compression_type = bytes_to_long(small_buffer + 4, 1);
+    chunk_length = swap_endianness(small_buffer, 4);
+    compression_type = swap_endianness(small_buffer + 4, 1);
     printf("Actual Length: %d\n", chunk_length);
     printf("Compression scheme: %d\n", compression_type);
 
@@ -213,37 +248,37 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
         unsigned char list_id;
 
         case TAG_BYTE: // Byte
-            payload = PyInt_FromLong(bytes_to_long(tag, 1));
+            payload = PyInt_FromLong(swap_endianness(tag, 1));
             *moved += sizeof(char);
             break;
 
         case TAG_SHORT: // Short
-            payload = PyInt_FromLong(bytes_to_long(tag, sizeof(short)));
+            payload = PyInt_FromLong(swap_endianness(tag, sizeof(short)));
             *moved += sizeof(short);
             break;
 
         case TAG_INT: // Int
-            payload = PyInt_FromLong(bytes_to_long(tag, sizeof(int)));
+            payload = PyInt_FromLong(swap_endianness(tag, sizeof(int)));
             *moved += sizeof(int);
             break;
 
         case TAG_LONG: // Long
-            payload = PyInt_FromLong(bytes_to_long(tag, sizeof(long)));
+            payload = PyInt_FromLong(swap_endianness(tag, sizeof(long)));
             *moved += sizeof(long);
             break;
 
         case TAG_FLOAT: // Float
-            payload = PyFloat_FromDouble((double) bytes_to_long(tag, sizeof(float)));
+            payload = PyFloat_FromDouble((double) swap_endianness(tag, sizeof(float)));
             *moved += sizeof(float);
             break;
 
         case TAG_DOUBLE: // Double
-            payload = PyFloat_FromDouble((double) bytes_to_long(tag, sizeof(double)));
+            payload = PyFloat_FromDouble((double) swap_endianness(tag, sizeof(double)));
             *moved += sizeof(double);
             break;
 
         case TAG_BYTE_ARRAY: // Byte array
-            size = bytes_to_long(tag, sizeof(int));
+            size = swap_endianness(tag, sizeof(int));
             tag += sizeof(int);
 
             payload = PyByteArray_FromStringAndSize((char *) tag, size);
@@ -251,7 +286,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
             break;
 
         case TAG_INT_ARRAY: // Int array
-            size = bytes_to_long(tag, sizeof(int));
+            size = swap_endianness(tag, sizeof(int));
             tag += sizeof(int);
 
             payload = PyList_New(size);
@@ -259,7 +294,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
             {
                 PyObject * integer;
 
-                integer = PyInt_FromLong(bytes_to_long(tag, sizeof(int)));
+                integer = PyInt_FromLong(swap_endianness(tag, sizeof(int)));
                 PyList_SET_ITEM(payload, i, integer);
                 tag += sizeof(int);
             }
@@ -267,7 +302,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
             break;
 
         case TAG_STRING: // String
-            size = bytes_to_long(tag, sizeof(short));
+            size = swap_endianness(tag, sizeof(short));
             tag += sizeof(short);
 
             payload = PyString_FromStringAndSize((char *) tag, size);
@@ -284,7 +319,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
 
         case TAG_LIST: // List
             list_id = tag[0];
-            size = bytes_to_long(tag + 1, sizeof(int));
+            size = swap_endianness(tag + 1, sizeof(int));
             tag += 1 + sizeof(int);
 
             payload = PyList_New(size);
@@ -313,7 +348,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
                 if( sub_id == 0 )
                     break; // Found the end of our compound tag
 
-                sub_tag_name_length = bytes_to_long(tag + 1, 2);
+                sub_tag_name_length = swap_endianness(tag + 1, 2);
 
                 // This should never happen, but the check doesn't hurt
                 if( sub_tag_name_length == 0 )
@@ -345,8 +380,25 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
     return payload;
 }
 
-// TODO: Going to ignore buffer size right now, but this isn't right
-int write_tags( unsigned char * dst, PyObject * dict, int * moved )
+int write_tags( unsigned char * dst, PyObject * dict )
+{
+    int moved;
+
+    // Write the root compound tag
+    memset(dst, TAG_COMPOUND, 1);
+    memset(dst + 1, 0, sizeof(short));
+    dst += 1 + sizeof(short);
+
+    moved = 0;
+    write_tags_helper(dst, dict, &moved);
+    dst += moved;
+
+    // Write the end tag
+    memset(dst, 0, 1);
+}
+
+// TODO: Buffer size might be an issue
+int write_tags_helper( unsigned char * dst, PyObject * dict, int * moved )
 {
     PyObject * keys;
     int i, size;
@@ -355,7 +407,6 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
     Py_INCREF(keys);
 
     size = PyDict_Size(dict);
-    printf("size: %d\n", size);
     for( i = 0; i < size; i++ )
     {
         PyObject * key, * value;
@@ -381,12 +432,13 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
                 break;
         }
 
-        printf("KEY: %s | NAME: %s | TAG_ID: %d\n", keystr, tag_info.name, tag_info.id);
+        // printf("KEY: %s | NAME: %s | TAG_ID: %d\n", keystr, tag_info.name, tag_info.id);
 
         // Write the tag header
         len = strlen(tag_info.name);
         memcpy(dst, &tag_info.id, 1); // TODO: Might not be right, due to endianness
-        memcpy(dst + 1, &len, 2);
+        memcpy(dst + 1, &len, 2); 
+        swap_endianness_in_memory(dst + 1, 2);
         memcpy(dst + 3 , tag_info.name, len);
 
         dst += 3 + len;
@@ -408,6 +460,7 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
             case TAG_SHORT:
                 long_tmp = PyInt_AsLong(value);
                 memcpy(dst, &long_tmp, sizeof(short));
+                swap_endianness_in_memory(dst, 2);
                 dst += sizeof(short);
                 *moved += sizeof(short);
                 break;
@@ -415,6 +468,7 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
             case TAG_INT:
                 long_tmp = PyInt_AsLong(value);
                 memcpy(dst, &long_tmp, sizeof(int));
+                swap_endianness_in_memory(dst, 4);
                 dst += sizeof(int);
                 *moved += sizeof(int);
                 break;
@@ -422,6 +476,7 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
             case TAG_LONG:
                 long_tmp = PyInt_AsLong(value);
                 memcpy(dst, &long_tmp, sizeof(long));
+                swap_endianness_in_memory(dst, 8);
                 dst += sizeof(long);
                 *moved += sizeof(long);
                 break;
@@ -429,6 +484,7 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
             case TAG_FLOAT:
                 double_tmp = PyFloat_AsDouble(value);
                 memcpy(dst, &double_tmp, sizeof(float));
+                swap_endianness_in_memory(dst, 4);
                 dst += sizeof(float);
                 *moved += sizeof(float);
                 break;
@@ -436,6 +492,7 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
             case TAG_DOUBLE:
                 double_tmp = PyFloat_AsDouble(value);
                 memcpy(dst, &double_tmp, sizeof(double));
+                swap_endianness_in_memory(dst, 8);
                 dst += sizeof(double);
                 *moved += sizeof(double);
                 break;
@@ -443,6 +500,7 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
             case TAG_BYTE_ARRAY:
                 size = PyByteArray_Size(value);
                 memcpy(dst, &size, sizeof(int));
+                swap_endianness_in_memory(dst, 4);
 
                 byte_array_tmp = PyByteArray_AsString(value);
                 memcpy(dst + sizeof(int), byte_array_tmp, size);
@@ -454,12 +512,14 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
             case TAG_INT_ARRAY:
                 size = PyList_Size(value);
                 memcpy(dst, &size, sizeof(int));
+                swap_endianness_in_memory(dst, 4);
                 dst += sizeof(int);
 
                 for( k = 0; k < size; k++ )
                 {
                     long_tmp = PyInt_AsLong(PyList_GetItem(value, k));
                     memcpy(dst, &long_tmp, sizeof(int));
+                    swap_endianness_in_memory(dst, 4);
                     dst += sizeof(int);
                 }
 
@@ -477,10 +537,10 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
                 {
                     size = PyString_Size(value);
                     memcpy(dst, &size, sizeof(short));
+                    swap_endianness_in_memory(dst, 2);
                     dst += sizeof(short);
 
                     byte_array_tmp = PyString_AsString(value);
-                    printf("STRING %p | %d\n", byte_array_tmp, size);
                     memcpy(dst, byte_array_tmp, 1);
 
                     dst += size;
@@ -494,7 +554,7 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
 
             case TAG_COMPOUND:
                 sub_moved = 0;
-                write_tags(dst, value, &sub_moved);
+                write_tags_helper(dst, value, &sub_moved);
                 memset(dst + sub_moved, 0, 1); // Write TAG_END
 
                 dst += sub_moved;
@@ -506,7 +566,6 @@ int write_tags( unsigned char * dst, PyObject * dict, int * moved )
                 break;
         }
     }
-
     Py_DECREF(keys);
     return 0;
 }
