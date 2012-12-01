@@ -67,6 +67,8 @@ static TagType leveldat_tags[] = {
     {NULL, NULL} // Sentinel
 };
 
+int write_tags_header( unsigned char * dst, PyObject * dict, int * moved );
+
 // Takes a number of bytes (in big-endian order), starting at a given location,
 // and returns the integer they represent
 long swap_endianness( unsigned char * buffer, int bytes )
@@ -393,7 +395,7 @@ int write_tags( unsigned char * dst, PyObject * dict )
     dst += 1 + sizeof(short);
 
     moved = 0;
-    write_tags_helper(dst, dict, &moved);
+    write_tags_header(dst, dict, &moved);
     dst += moved;
 
     // Write the end tag
@@ -402,8 +404,138 @@ int write_tags( unsigned char * dst, PyObject * dict )
     return 0;
 }
 
+
+int write_tags_payload( unsigned char * dst, int tag_id, PyObject * payload, int * moved )
+{
+    switch( tag_id )
+    {
+        long long_tmp;
+        double double_tmp;
+        char * byte_array_tmp;
+        int k, size, sub_moved;
+
+        case TAG_BYTE:
+            long_tmp = PyInt_AsLong(payload);
+            memcpy(dst, &long_tmp, 1);
+            *moved += 1;
+            break;
+
+        case TAG_SHORT:
+            long_tmp = PyInt_AsLong(payload);
+            memcpy(dst, &long_tmp, sizeof(short));
+            swap_endianness_in_memory(dst, 2);
+            *moved += sizeof(short);
+            break;
+
+        case TAG_INT:
+            long_tmp = PyInt_AsLong(payload);
+            memcpy(dst, &long_tmp, sizeof(int));
+            swap_endianness_in_memory(dst, 4);
+            *moved += sizeof(int);
+            break;
+
+        case TAG_LONG:
+            long_tmp = PyInt_AsLong(payload);
+            memcpy(dst, &long_tmp, sizeof(long));
+            swap_endianness_in_memory(dst, 8);
+            *moved += sizeof(long);
+            break;
+
+        case TAG_FLOAT:
+            double_tmp = PyFloat_AsDouble(payload);
+            memcpy(dst, &double_tmp, sizeof(float));
+            swap_endianness_in_memory(dst, 4);
+            *moved += sizeof(float);
+            break;
+
+        case TAG_DOUBLE:
+            double_tmp = PyFloat_AsDouble(payload);
+            memcpy(dst, &double_tmp, sizeof(double));
+            swap_endianness_in_memory(dst, 8);
+            *moved += sizeof(double);
+            break;
+
+        case TAG_BYTE_ARRAY:
+            size = PyByteArray_Size(payload);
+            memcpy(dst, &size, sizeof(int));
+            swap_endianness_in_memory(dst, 4);
+
+            byte_array_tmp = PyByteArray_AsString(payload);
+            memcpy(dst + sizeof(int), byte_array_tmp, size);
+
+            *moved += size;
+            break;
+
+        case TAG_INT_ARRAY:
+            size = PyList_Size(payload);
+            memcpy(dst, &size, sizeof(int));
+            swap_endianness_in_memory(dst, 4);
+            dst += sizeof(int);
+
+            for( k = 0; k < size; k++ )
+            {
+                long_tmp = PyInt_AsLong(PyList_GetItem(payload, k));
+                memcpy(dst, &long_tmp, sizeof(int));
+                swap_endianness_in_memory(dst, 4);
+                dst += sizeof(int);
+            }
+
+            *moved += sizeof(int) * (size + 1);
+            break;
+
+        case TAG_STRING:
+            // Special case, where a 'true' or 'false' has been changed
+            // to a Python boolean object
+            if( payload == Py_True )
+            {
+                size = 4;
+                byte_array_tmp = "true";
+            }
+            else if( payload == Py_False )
+            {
+                size = 5;
+                byte_array_tmp = "false";
+            }
+            else
+            {
+                size = PyString_Size(payload);
+                byte_array_tmp = PyString_AsString(payload);
+            }
+
+            memcpy(dst, &size, sizeof(short));
+            swap_endianness_in_memory(dst, 2);
+            memcpy(dst + sizeof(short), byte_array_tmp, size);
+
+            *moved += sizeof(short) + size; 
+            break;
+
+        case TAG_LIST:
+            // TODO: MAKE THIS WORK :D
+
+
+
+
+
+
+
+
+            break;
+
+        case TAG_COMPOUND:
+            sub_moved = 0;
+            write_tags_header(dst, payload, &sub_moved);
+            memset(dst + sub_moved, 0, 1); // Write TAG_END
+            *moved += sub_moved + 1;
+            break;
+
+        default:
+            PyErr_Format(PyExc_Exception, "\'%d\' is not a valid tag ID", tag_id);
+            break;
+    }
+}
+
 // TODO: Buffer size might be an issue
-int write_tags_helper( unsigned char * dst, PyObject * dict, int * moved )
+int write_tags_header( unsigned char * dst, PyObject * dict, int * moved )
 {
     PyObject * keys;
     int i, size;
@@ -416,7 +548,7 @@ int write_tags_helper( unsigned char * dst, PyObject * dict, int * moved )
     {
         PyObject * key, * value;
         char * keystr;
-        int j, len;
+        int j, len, sub_moved;
         struct TagType tag_info;
 
         key = PyList_GetItem(keys, i); // Known to be a PyString
@@ -446,189 +578,13 @@ int write_tags_helper( unsigned char * dst, PyObject * dict, int * moved )
         swap_endianness_in_memory(dst + 1, 2);
         memcpy(dst + 3 , tag_info.name, len);
 
-        dst += 3 + len;
-        *moved += 3 + len;
-        switch( tag_info.id )
-        {
-            long long_tmp;
-            double double_tmp;
-            char * byte_array_tmp;
-            int k, size, sub_moved;
+        // Write the tag
+        sub_moved = 0;
+        write_tags_payload(dst + 3 + len, tag_info.id, value, &sub_moved);
 
-            case TAG_BYTE:
-                long_tmp = PyInt_AsLong(value);
-                memcpy(dst, &long_tmp, 1);
-                dst += 1;
-                *moved += 1;
-                break;
-
-            case TAG_SHORT:
-                long_tmp = PyInt_AsLong(value);
-                memcpy(dst, &long_tmp, sizeof(short));
-                swap_endianness_in_memory(dst, 2);
-                dst += sizeof(short);
-                *moved += sizeof(short);
-                break;
-
-            case TAG_INT:
-                long_tmp = PyInt_AsLong(value);
-                memcpy(dst, &long_tmp, sizeof(int));
-                swap_endianness_in_memory(dst, 4);
-                dst += sizeof(int);
-                *moved += sizeof(int);
-                break;
-
-            case TAG_LONG:
-                long_tmp = PyInt_AsLong(value);
-                memcpy(dst, &long_tmp, sizeof(long));
-                swap_endianness_in_memory(dst, 8);
-                dst += sizeof(long);
-                *moved += sizeof(long);
-                break;
-
-            case TAG_FLOAT:
-                double_tmp = PyFloat_AsDouble(value);
-                memcpy(dst, &double_tmp, sizeof(float));
-                swap_endianness_in_memory(dst, 4);
-                dst += sizeof(float);
-                *moved += sizeof(float);
-                break;
-
-            case TAG_DOUBLE:
-                double_tmp = PyFloat_AsDouble(value);
-                memcpy(dst, &double_tmp, sizeof(double));
-                swap_endianness_in_memory(dst, 8);
-                dst += sizeof(double);
-                *moved += sizeof(double);
-                break;
-
-            case TAG_BYTE_ARRAY:
-                size = PyByteArray_Size(value);
-                memcpy(dst, &size, sizeof(int));
-                swap_endianness_in_memory(dst, 4);
-
-                byte_array_tmp = PyByteArray_AsString(value);
-                memcpy(dst + sizeof(int), byte_array_tmp, size);
-
-                dst += sizeof(int) + size;
-                *moved += size;
-                break;
-
-            case TAG_INT_ARRAY:
-                size = PyList_Size(value);
-                memcpy(dst, &size, sizeof(int));
-                swap_endianness_in_memory(dst, 4);
-                dst += sizeof(int);
-
-                for( k = 0; k < size; k++ )
-                {
-                    long_tmp = PyInt_AsLong(PyList_GetItem(value, k));
-                    memcpy(dst, &long_tmp, sizeof(int));
-                    swap_endianness_in_memory(dst, 4);
-                    dst += sizeof(int);
-                }
-
-                *moved += sizeof(int) * (size + 1);
-                break;
-
-            case TAG_STRING:
-                // Special case, where a 'true' or 'false' has been changed
-                // to a Python boolean object
-                if( value == Py_True )
-                {
-                    size = 4;
-                    byte_array_tmp = "true";
-                }
-                else if( value == Py_False )
-                {
-                    size = 5;
-                    byte_array_tmp = "false";
-                }
-                else
-                {
-                    size = PyString_Size(value);
-                    byte_array_tmp = PyString_AsString(value);
-                }
-
-                memcpy(dst, &size, sizeof(short));
-                swap_endianness_in_memory(dst, 2);
-                memcpy(dst + sizeof(short), byte_array_tmp, size);
-
-                dst += sizeof(short) + size;
-                *moved += sizeof(short) + size; 
-                break;
-
-            case TAG_LIST:
-                printf("TAG LIST, NOT IMPLEMENTED");
-                break;
-
-            case TAG_COMPOUND:
-                sub_moved = 0;
-                write_tags_helper(dst, value, &sub_moved);
-                memset(dst + sub_moved, 0, 1); // Write TAG_END
-
-                dst += sub_moved;
-                *moved += sub_moved + 1;
-                break;
-
-            default:
-                PyErr_Format(PyExc_Exception, "\'%d\' is not a valid tag ID", tag_info.id);
-                break;
-        }
+        dst += 3 + len + sub_moved;
+        *moved += 3 + len + sub_moved;
     }
     Py_DECREF(keys);
-    return 0;
-}
-
-// For testing
-int main( int argc, char *argv[] )
-{
-    FILE *fp;
-    unsigned char * src, * dst;
-
-    if ( argc < 2 )
-    {
-        printf("No region filename specified");
-        exit(1);
-    }
-
-    /*
-
-    TEST CODE
-
-    */
-
-    src = calloc(10000, 1);
-    dst = calloc(10000, 1);
-
-    fp = fopen(argv[1], "rb"); // TODO: Does 'rb' vs 'r' mean anything?
-    if( fp != NULL )
-    {
-        struct stat stbuf;
-        int size;
-
-        fstat(fileno(fp), &stbuf);
-        size = stbuf.st_size;
-        printf("Size is: %d\n", size);
-
-        fread(src, 1, size, fp);
-        dump_buffer(src, 600);
-
-        inf(dst, src, size, 1);
-
-        dump_buffer(dst, 600);
-    }
-
-    free(src);
-    free(dst);
-
-    /*
-
-    END OF TEST CODE
-
-    */
-
-    fclose(fp);
-
     return 0;
 }
