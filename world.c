@@ -54,7 +54,7 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
         inf(dst, src, size, 1);
 
         printf("\n\nOriginal, unpacked data:\n");
-        dump_buffer(dst, 200);
+        dump_buffer(dst, 480);
 
         moved = 0;
         level = get_tag(dst, -1, &moved);
@@ -82,12 +82,21 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
 // Right now, just save out level.dat
 static PyObject * World_save( World *self )
 {
+    FILE * fp;
     unsigned char * dst;
     int moved;
 
     dst = calloc(10000, 1);
     write_tags(dst, self->level);
-    dump_buffer(dst, 200);
+    dump_buffer(dst, 480);
+
+    fp = fopen("test", "wb");
+    if( fp != NULL )
+    {
+        fwrite(dst, 10000, 1, fp);
+
+        fclose(fp);
+    }
 
     free(dst);
 

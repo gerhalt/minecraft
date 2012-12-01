@@ -103,7 +103,7 @@ void swap_endianness_in_memory( unsigned char * buffer, int bytes )
 }
 
 // Takes a buffer and prints it prettily
-void dump_buffer(unsigned char * buffer, int count)
+void dump_buffer( unsigned char * buffer, int count )
 {
     int i;
 
@@ -309,9 +309,9 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
 
             // Take care of the special case where a boolean value is 
             // represented as a string, and convert to a Python boolean object
-            if( strcmp(PyString_AsString(payload), "true") )
+            if( memcmp(PyString_AsString(payload), "true", size) )
                 payload = Py_True;
-            else if( strcmp(PyString_AsString(payload), "false") )
+            else if( memcmp(PyString_AsString(payload), "false", size)  )
                 payload = Py_False;
 
             *moved += sizeof(short) + size;
@@ -346,7 +346,10 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
 
                 sub_id = *tag;
                 if( sub_id == 0 )
+                {
+                    *moved += 1;
                     break; // Found the end of our compound tag
+                }
 
                 sub_tag_name_length = swap_endianness(tag + 1, 2);
 
@@ -395,6 +398,8 @@ int write_tags( unsigned char * dst, PyObject * dict )
 
     // Write the end tag
     memset(dst, 0, 1);
+
+    return 0;
 }
 
 // TODO: Buffer size might be an issue
@@ -436,7 +441,7 @@ int write_tags_helper( unsigned char * dst, PyObject * dict, int * moved )
 
         // Write the tag header
         len = strlen(tag_info.name);
-        memcpy(dst, &tag_info.id, 1); // TODO: Might not be right, due to endianness
+        memcpy(dst, &tag_info.id, 1);
         memcpy(dst + 1, &len, 2); 
         swap_endianness_in_memory(dst + 1, 2);
         memcpy(dst + 3 , tag_info.name, len);
@@ -530,22 +535,27 @@ int write_tags_helper( unsigned char * dst, PyObject * dict, int * moved )
                 // Special case, where a 'true' or 'false' has been changed
                 // to a Python boolean object
                 if( value == Py_True )
-                    memcpy(dst, "true", 4);
+                {
+                    size = 4;
+                    byte_array_tmp = "true";
+                }
                 else if( value == Py_False )
-                    memcpy(dst, "false", 5);
+                {
+                    size = 5;
+                    byte_array_tmp = "false";
+                }
                 else
                 {
                     size = PyString_Size(value);
-                    memcpy(dst, &size, sizeof(short));
-                    swap_endianness_in_memory(dst, 2);
-                    dst += sizeof(short);
-
                     byte_array_tmp = PyString_AsString(value);
-                    memcpy(dst, byte_array_tmp, 1);
-
-                    dst += size;
-                    *moved += sizeof(short) + size; 
                 }
+
+                memcpy(dst, &size, sizeof(short));
+                swap_endianness_in_memory(dst, 2);
+                memcpy(dst + sizeof(short), byte_array_tmp, size);
+
+                dst += sizeof(short) + size;
+                *moved += sizeof(short) + size; 
                 break;
 
             case TAG_LIST:

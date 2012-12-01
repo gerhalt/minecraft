@@ -25,10 +25,12 @@ typedef struct {
 PyTypeObject minecraft_ChunkType;
 
 // nbt.c
+void dump_buffer( unsigned char * buffer, int count );
 int inf( unsigned char * dst, unsigned char * src, int bytes, int mode );
 int def( unsigned char * dst, unsigned char * src, int bytes, int mode );
 PyObject * get_tag( unsigned char * tag, char tag_id, int * moved );
-int write_tags( unsigned char * dst, PyObject * dict ); 
+int write_tags( unsigned char * dst, PyObject * dict );
+
 
 // world.c
 PyTypeObject minecraft_WorldType;

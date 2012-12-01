@@ -33,6 +33,8 @@ static int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
 {
     if( !PyArg_ParseTuple(args, "ii", &self->chunk_x, &self->chunk_z) )
         return -1;
+
+    return 0;
 }
 
 static PyMemberDef Chunk_members[] = {
