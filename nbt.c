@@ -15,8 +15,8 @@ Decompression and NBT reading utilities
 typedef struct TagType{
     char * name;
     int id;
-    int size;   // Optional, for List and Array tags
-    int sub_id; // Optional, for List tag
+    bool empty_byte_list;
+    unsigned char sub_tag_id; // Optional, for List tag
 } TagType;
 
 // TODO: This may not be the best place to put this
@@ -411,11 +411,11 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
 {
     switch(tag_info.id)
     {
+        PyObject * list_item_tmp;
         long long_tmp;
         double double_tmp;
         char * byte_array_tmp;
-        int k, size, sub_moved;
-        char sub_tag_id;
+        int i, size, sub_moved;
 
         case TAG_BYTE:
             long_tmp = PyInt_AsLong(payload);
@@ -475,9 +475,9 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
             swap_endianness_in_memory(dst, 4);
             dst += sizeof(int);
 
-            for( k = 0; k < size; k++ )
+            for( i = 0; i < size; i++ )
             {
-                long_tmp = PyInt_AsLong(PyList_GetItem(payload, k));
+                long_tmp = PyInt_AsLong(PyList_GetItem(payload, i));
                 memcpy(dst, &long_tmp, sizeof(int));
                 swap_endianness_in_memory(dst, 4);
                 dst += sizeof(int);
@@ -513,15 +513,36 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
             break;
 
         case TAG_LIST:
-            sub_tag_id = *dst;
+            // If we hit this, the extra fields for the tag_info should be set
+            *dst = tag_info.sub_tag_id;
+            size = PyList_Size(payload);
 
+            // Special case: if the list tag is empty, some list tags will 
+            // still be written to the file as a byte array
+            if( size == 0 && tag_info.empty_byte_list )
+            {
+                *dst = TAG_BYTE_ARRAY; 
+                *moved += 5; // 1 + 4 for the empty byte array
+                break;
+            }
 
+            memcpy(dst + 1, &size, 4);
+            swap_endianness_in_memory(dst + 1, 4);
+            dst += 5;
+            *moved += 5;
 
+            for( i = 0; i < size; i++ )
+            {
+                TagType sub_tag_info;
 
+                sub_moved = 0;
+                sub_tag_info.id = tag_info.sub_tag_id;
+                list_item_tmp = PyList_GetItem(payload, i);
+                write_tags_payload(dst, sub_tag_info, list_item_tmp, &sub_moved);
 
-
-
-
+                dst += sub_moved;
+                *moved += sub_moved;
+            }
             break;
 
         case TAG_COMPOUND:
@@ -535,6 +556,7 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
             PyErr_Format(PyExc_Exception, "\'%d\' is not a valid tag ID", tag_info.id);
             break;
     }
+    return 0;
 }
 
 // TODO: Buffer size might be an issue
