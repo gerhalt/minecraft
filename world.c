@@ -83,22 +83,28 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
 static PyObject * World_save( World *self )
 {
     FILE * fp;
-    unsigned char * dst;
-    int moved;
+    char filename[1000];
+    unsigned char * compressed, * uncompressed;
+    int size;
 
-    dst = calloc(10000, 1);
-    write_tags(dst, self->level);
-    dump_buffer(dst, 480);
+    uncompressed = calloc(10000, 1);
+    compressed = calloc(5000, 1);
+    size = write_tags(uncompressed, self->level);
+    dump_buffer(uncompressed, 480);
 
-    fp = fopen("test", "wb");
+    def(compressed, uncompressed, size, 1);
+
+    sprintf(filename, "%s/level.dat", self->path);
+    fp = fopen(filename, "wb");
     if( fp != NULL )
     {
-        fwrite(dst, 10000, 1, fp);
+        fwrite(compressed, size, 1, fp);
 
         fclose(fp);
     }
 
-    free(dst);
+    free(compressed);
+    free(uncompressed);
 
     Py_INCREF(Py_None);
     return Py_None;

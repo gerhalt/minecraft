@@ -363,7 +363,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
 
                 sub_tag_name = calloc(sub_tag_name_length + 1, 1);
                 strncpy(sub_tag_name, (char *) tag + 3, sub_tag_name_length);
-                // printf("Tag ID: %d | Name: %.*s\n", sub_id, sub_tag_name_length, sub_tag_name);
+                printf("Tag ID: %d | Name: %.*s\n", sub_id, sub_tag_name_length, sub_tag_name);
 
                 tag += 3 + sub_tag_name_length;
                 sub_moved = 0;
@@ -387,6 +387,13 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
     return payload;
 }
 
+/*
+write_tags
+  * dst - destination buffer
+  * dict - Python dictionary to convert
+returns
+  total size of written tags, including root tag
+*/
 int write_tags( unsigned char * dst, PyObject * dict )
 {
     int moved;
@@ -403,7 +410,8 @@ int write_tags( unsigned char * dst, PyObject * dict )
     // Write the end tag
     memset(dst, 0, 1);
 
-    return 0;
+    printf("MOVED: %d\n", moved + 4);
+    return moved + 4; // Size of subtags + 4 bytes for root tag
 }
 
 
