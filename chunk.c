@@ -48,7 +48,7 @@ Python object-related code
 */
 void Chunk_dealloc( Chunk *self )
 {
-    // decrement references to PyObject *'s
+    Py_DECREF(self->dict);
     self->ob_type->tp_free((PyObject *) self);
 }
 

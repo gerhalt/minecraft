@@ -99,7 +99,20 @@ static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds
         return Py_None;
     }
 
-    sprintf(filename, "%s/r.%d.%d.mca", self->path, region_x, region_z);
+    // Check to make sure the region isn't already in memory
+    region = self->regions;
+    while( region != NULL )
+    {
+        if( region->x == region_x && region->z == region_z )
+        {
+            printf("Region already in memory!\n");
+            Py_INCREF(Py_None);
+            return Py_None;
+        }
+        region = region->next;
+    }
+
+    sprintf(filename, "%s/region/r.%d.%d.mca", self->path, region_x, region_z);
     printf("Attempting to load %s\n", filename);
 
     region = malloc(sizeof(Region));
@@ -124,6 +137,8 @@ static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds
         region->buffer = calloc(size, 1);
         region->buffer_size = size;
         region->current_size = st.st_size;
+
+        fclose(fp);
     }
     region->x = region_x;
     region->z = region_z;
@@ -131,6 +146,36 @@ static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds
     self->regions = region;
 
     print_region_info(region);
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject * World_save_region( World *self, PyObject *args, PyObject *kwds )
+{
+    Region * region;
+    int region_x, region_z;
+
+    if( !PyArg_ParseTuple(args, "ii", &region_x, &region_z) )
+    {
+        PyErr_Format(PyExc_Exception, "Cannot parse load_region parameters");
+
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    region = self->regions;
+    while( region != NULL )
+    {
+        if( region->x == region_x && region->z == region_z )
+            break;
+        region = region->next;
+    }
+
+    if( region == NULL)
+        printf("Region (%d, %d) not loaded!\n", region_x, region_z);
+    else
+        save_region(region, self->path); 
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -183,6 +228,7 @@ static PyMethodDef World_methods[] = {
     {"save", (PyCFunction) World_save, METH_NOARGS, "Save the world! (out to file, anyway)"},
     {"load_chunk", (PyCFunction) World_load_chunk, METH_VARARGS, "Load a chunk."},
     {"load_region", (PyCFunction) World_load_region, METH_VARARGS, "Load a region."},
+    {"save_region", (PyCFunction) World_save_region, METH_VARARGS, "Save a region, assuming it has been modified and is in memory"},
     {NULL}
 };
 

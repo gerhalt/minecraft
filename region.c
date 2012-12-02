@@ -96,7 +96,7 @@ int save_region( Region *region, char * path )
     FILE * fp;
     char filename[1000]; // TODO: Dynamic
 
-    sprintf(filename, "%s/r.%d.%d.mca", path, region->x, region->z);
+    sprintf(filename, "%s/region/r.%d.%d.mca", path, region->x, region->z);
     fp = fopen(filename, "wb");
     if( fp == NULL )
     {
@@ -106,6 +106,8 @@ int save_region( Region *region, char * path )
 
     fwrite(region->buffer, 1, region->current_size, fp); 
     fclose(fp);
+
+    printf("Region saved!\n");
 
     return 0;
 }
