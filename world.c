@@ -1,13 +1,17 @@
 /*
-chunk.c
+world.c
 
-Chunk object definition and functionality
+World object definition and functionality
 */
 
 #include <Python.h>
 #include <structmember.h>
 #include <stdbool.h>
 #include "minecraft.h"
+
+#define MAX_REGIONS             8
+#define NEW_REGION_BUFFER_SIZE  2000000
+#define REGION_BUFFER_PADDING   10000
 
 /*
 
@@ -75,8 +79,67 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
     }
 
     self->path = tmp;
+    self->regions = NULL;
 
     return 0;
+}
+
+static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds )
+{
+    FILE * fp;
+    Region * region;
+    int region_x, region_z;
+    char filename[1000]; // TODO: Dynamic
+
+    if( !PyArg_ParseTuple(args, "ii", &region_x, &region_z) )
+    {
+        PyErr_Format(PyExc_Exception, "Cannot parse load_region parameters");
+
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    sprintf(filename, "%s/r.%d.%d.mca", self->path, region_x, region_z);
+    printf("Attempting to load %s\n", filename);
+
+    region = malloc(sizeof(Region));
+
+    fp = fopen(filename, "rb");
+    if( fp == NULL )
+    {
+        printf("Cannot open region file, creating new buffer\n");
+        // Create a new region buffer for the region
+        region->buffer = calloc(NEW_REGION_BUFFER_SIZE, 1);
+        region->buffer_size = NEW_REGION_BUFFER_SIZE;
+        region->current_size = 0;
+    }
+    else
+    {
+        // Load the region into the buffer
+        struct stat st;
+        int size;
+
+        stat(filename, &st);
+        size = st.st_size + REGION_BUFFER_PADDING;
+        region->buffer = calloc(size, 1);
+        region->buffer_size = size;
+        region->current_size = st.st_size;
+    }
+    region->x = region_x;
+    region->z = region_z;
+    region->next = self->regions;
+    self->regions = region;
+
+    print_region_info(region);
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject * World_load_chunk( World *self, PyObject *args, PyObject *kwds )
+{
+    // Make sure region file chunk would exist in exists
+    return PyObject_CallObject((PyObject *) &minecraft_ChunkType, args); // Reference?
 }
 
 // Right now, just save out level.dat
@@ -117,7 +180,9 @@ static PyMemberDef World_members[] = {
 };
 
 static PyMethodDef World_methods[] = {
-    {"save", (PyCFunction) World_save, METH_NOARGS, "Save the world! (out to files, anyway)"},
+    {"save", (PyCFunction) World_save, METH_NOARGS, "Save the world! (out to file, anyway)"},
+    {"load_chunk", (PyCFunction) World_load_chunk, METH_VARARGS, "Load a chunk."},
+    {"load_region", (PyCFunction) World_load_region, METH_VARARGS, "Load a region."},
     {NULL}
 };
 

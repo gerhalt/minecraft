@@ -10,64 +10,8 @@ Decompression and NBT reading utilities
 #include <stdio.h>
 #include <string.h>
 #include "minecraft.h"
+#include "tags.h"
 #include "zlib.h"
-
-typedef struct TagType{
-    char * name;
-    int id;
-    bool empty_byte_list;
-    unsigned char sub_tag_id; // Optional, for List tag
-} TagType;
-
-// TODO: This may not be the best place to put this
-#define TAG_END         0
-#define TAG_BYTE        1
-#define TAG_SHORT       2
-#define TAG_INT         3
-#define TAG_LONG        4
-#define TAG_FLOAT       5
-#define TAG_DOUBLE      6
-#define TAG_BYTE_ARRAY  7
-#define TAG_STRING      8
-#define TAG_LIST        9
-#define TAG_COMPOUND    10
-#define TAG_INT_ARRAY   11
-
-static TagType leveldat_tags[] = {
-    {"Data", TAG_COMPOUND},
-    {"version", TAG_INT},
-    {"initialized", TAG_BYTE},
-    {"LevelName", TAG_STRING},
-    {"generatorName", TAG_STRING},
-    {"generatorVersion", TAG_INT},
-    {"generatorOptions", TAG_STRING},
-    {"RandomSeed", TAG_LONG},
-    {"MapFeatures", TAG_BYTE},
-    {"LastPlayed", TAG_LONG},
-    {"SizeOnDisk", TAG_LONG},
-    {"allowCommands", TAG_BYTE},
-    {"hardcore", TAG_BYTE},
-    {"GameType", TAG_INT},
-    {"Time", TAG_LONG},
-    {"DayTime", TAG_LONG},
-    {"SpawnX", TAG_INT},
-    {"SpawnY", TAG_INT},
-    {"SpawnZ", TAG_INT},
-    {"raining", TAG_BYTE},
-    {"rainTime", TAG_INT},
-    {"thundering", TAG_BYTE},
-    {"thunderTime", TAG_INT},
-    {"Player", TAG_COMPOUND},
-    {"GameRules", TAG_COMPOUND},
-    {"commandBlockOutput", TAG_STRING},
-    {"doFireTick", TAG_STRING},
-    {"doMobLoot", TAG_STRING},
-    {"doMobSpawning", TAG_STRING},
-    {"doTileDrops", TAG_STRING},
-    {"keepInventory", TAG_STRING},
-    {"mobGriefing", TAG_STRING},
-    {NULL, NULL} // Sentinel
-};
 
 int write_tags_header( unsigned char * dst, PyObject * dict, int * moved );
 
@@ -195,41 +139,6 @@ int def( unsigned char * dst, unsigned char * src, int bytes, int mode )
         PyErr_Format(PyExc_Exception, "Unable to compress (RC: %d | Error: %s)", ret, strm.msg);
 
     return ret;
-}
-
-// Takes a region file stream and a chunk location and finds and decompresses
-// the chunk to the passed buffer
-int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int chunkZ )
-{
-    unsigned int offset, chunk_length, compression_type;
-    unsigned char small_buffer[5], compressed_chunk_buffer[1048576];
-
-    printf("Finding chunk (%d, %d)\n", chunkX, chunkZ);
-    fseek(region_file, 4 * ((chunkX & 31) + (chunkZ & 31) * 32), SEEK_SET);
-    fread(small_buffer, 4, 1, region_file);
-
-    offset = swap_endianness(small_buffer, 3) * 4096;
-    if ( offset == 0 )
-    {
-        //printf("Chunk is empty!\n");
-        return 0;
-    }
-
-    printf("Offset: %d | Length: %d\n", offset, small_buffer[3] * 4096);
-
-    // Seek to start of chunk, copy it into buffer
-    fseek(region_file, offset, SEEK_SET);
-    memset(small_buffer, 0, 5);
-    fread(small_buffer, 5, 1, region_file);
-    chunk_length = swap_endianness(small_buffer, 4);
-    compression_type = swap_endianness(small_buffer + 4, 1);
-    printf("Actual Length: %d\n", chunk_length);
-    printf("Compression scheme: %d\n", compression_type);
-
-    fread(compressed_chunk_buffer, chunk_length - 1, 1, region_file);
-    inf(chunk_buffer, compressed_chunk_buffer, chunk_length - 1, 0);
-
-    return 1;
 }
 
 // Given a pointer to a payload, return a PyObject representing that payload
