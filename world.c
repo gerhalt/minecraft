@@ -9,9 +9,94 @@ World object definition and functionality
 #include <stdbool.h>
 #include "minecraft.h"
 
+#define MAX_CHUNKS              100
 #define MAX_REGIONS             8
 #define NEW_REGION_BUFFER_SIZE  2000000
 #define REGION_BUFFER_PADDING   10000
+
+/*
+Ensures that a region is in memory, or copies the file into memory if it isn't.
+If the region doesn't exist in file form, simply creates a new region in
+memory, which can then be saved out.
+
+Currently wrapped by World_load_region(...), though this function may end up
+being deprecated.
+*/
+Region * load_region( World *self, int x, int z )
+{
+    FILE * fp;
+    Region * region;
+    char filename[1000]; // TODO: Dynamic
+    int count;
+
+    // Check to make sure the region isn't already in memory, and count we'll
+    // we're at it (for use below)
+    region = self->regions;
+    count = 0;
+    while( region != NULL )
+    {
+        if( region->x == x && region->z == z )
+        {
+            printf("Region already in memory!\n");
+            return region;
+        }
+        region = region->next;
+        count++;
+    }
+
+    // Ensure we aren't up against the maximum number of regions in memory - if
+    // we are, we'll boot the least-recently used one
+    if( count >= MAX_REGIONS )
+    {
+        printf("Hit max number of regions in memory, discarding last\n");
+        region = self->regions;
+        count = 0;
+        do {
+            region = region->next;
+            count++;
+        } while( count < MAX_REGIONS );
+        // Chop off the end
+        unload_region(region->next, self->path);
+        region->next = NULL;
+    }
+
+    sprintf(filename, "%s/region/r.%d.%d.mca", self->path, x, z);
+    printf("Attempting to load %s\n", filename);
+
+    region = malloc(sizeof(Region));
+
+    fp = fopen(filename, "rb");
+    if( fp == NULL )
+    {
+        printf("Cannot open region file, creating new buffer\n");
+        // Create a new region buffer for the region
+        region->buffer = calloc(NEW_REGION_BUFFER_SIZE, 1);
+        region->buffer_size = NEW_REGION_BUFFER_SIZE;
+        region->current_size = 0;
+    }
+    else
+    {
+        // Load the region into the buffer
+        struct stat st;
+        int size;
+
+        stat(filename, &st);
+        size = st.st_size + REGION_BUFFER_PADDING;
+        region->buffer = calloc(size, 1);
+        region->buffer_size = size;
+        region->current_size = st.st_size;
+
+        fclose(fp);
+    }
+    region->x = x;
+    region->z = z;
+    region->next = self->regions;
+    self->regions = region;
+
+    print_region_info(region);
+
+    return region;
+}
 
 /*
 
@@ -81,17 +166,60 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
     self->path = tmp;
     self->regions = NULL;
 
+    // TODO: May get wrapper or moved, this is perhaps not the best way to 
+    // store this information, but it should work for now
+    self->chunk_count = 0;
+
     return 0;
 }
 
+/*
+TODO: These need to be expanded.  Basically I'd expect to be able to put a
+block and get a block without needing to deal with chunks at all.
+*/
+static PyObject * World_get_block( World *self, PyObject *args, PyObject *kwds )
+{
+    PyObject * chunk, * chunk_args;
+    int x, y, z;
+
+   if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
+    {
+        PyErr_Format(PyExc_Exception, "Cannot parse parameters");
+
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    // TODO: Parse arguments, int x, y, z and a block?
+    // TODO: I am treating x and z as chunk coordinates, when they are block
+    //       coordinates.  This needs to be fixed
+
+    chunk_args = Py_BuildValue("Oii", (PyObject *) self, x, z);
+    chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
+/*
+    Block * block;
+    block = Chunk_get_block(CHUNK..., x, y, z);
+    return block
+    */
+    
+    //Py_INCREF(chunk); // TODO: Yes?
+
+//    Py_INCREF(chunk);
+    return chunk;
+}
+
+static PyObject * World_put_block( World *self )
+{
+    // TODO: This will load a chunk too
+    return NULL;
+}
+
+// TODO: Re-evalute, moving this to a wrapper
 static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds )
 {
-    FILE * fp;
-    Region * region;
     int region_x, region_z;
-    char filename[1000]; // TODO: Dynamic
 
-    if( !PyArg_ParseTuple(args, "ii", &region_x, &region_z) )
+   if( !PyArg_ParseTuple(args, "ii", &region_x, &region_z) )
     {
         PyErr_Format(PyExc_Exception, "Cannot parse load_region parameters");
 
@@ -99,53 +227,7 @@ static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds
         return Py_None;
     }
 
-    // Check to make sure the region isn't already in memory
-    region = self->regions;
-    while( region != NULL )
-    {
-        if( region->x == region_x && region->z == region_z )
-        {
-            printf("Region already in memory!\n");
-            Py_INCREF(Py_None);
-            return Py_None;
-        }
-        region = region->next;
-    }
-
-    sprintf(filename, "%s/region/r.%d.%d.mca", self->path, region_x, region_z);
-    printf("Attempting to load %s\n", filename);
-
-    region = malloc(sizeof(Region));
-
-    fp = fopen(filename, "rb");
-    if( fp == NULL )
-    {
-        printf("Cannot open region file, creating new buffer\n");
-        // Create a new region buffer for the region
-        region->buffer = calloc(NEW_REGION_BUFFER_SIZE, 1);
-        region->buffer_size = NEW_REGION_BUFFER_SIZE;
-        region->current_size = 0;
-    }
-    else
-    {
-        // Load the region into the buffer
-        struct stat st;
-        int size;
-
-        stat(filename, &st);
-        size = st.st_size + REGION_BUFFER_PADDING;
-        region->buffer = calloc(size, 1);
-        region->buffer_size = size;
-        region->current_size = st.st_size;
-
-        fclose(fp);
-    }
-    region->x = region_x;
-    region->z = region_z;
-    region->next = self->regions;
-    self->regions = region;
-
-    print_region_info(region);
+    load_region(self, region_x, region_z);
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -227,6 +309,8 @@ static PyMemberDef World_members[] = {
 static PyMethodDef World_methods[] = {
     {"save", (PyCFunction) World_save, METH_NOARGS, "Save the world! (out to file, anyway)"},
     {"load_chunk", (PyCFunction) World_load_chunk, METH_VARARGS, "Load a chunk."},
+    {"get_block", (PyCFunction) World_get_block, METH_VARARGS, "Get the block at a given location."},
+    {"put_block", (PyCFunction) World_put_block, METH_NOARGS, "Put a block at a given spot."},
     {"load_region", (PyCFunction) World_load_region, METH_VARARGS, "Load a region."},
     {"save_region", (PyCFunction) World_save_region, METH_VARARGS, "Save a region, assuming it has been modified and is in memory"},
     {NULL}

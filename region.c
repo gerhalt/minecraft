@@ -122,6 +122,8 @@ int unload_region( Region *region, char * path )
     int rc;
 
     rc = save_region(region, path);
+    if( region->next != NULL)
+        unload_region(region->next, path); // Could potentially loop
     free(region->buffer);
     free(region);
 

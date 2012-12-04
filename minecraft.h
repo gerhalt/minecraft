@@ -12,7 +12,7 @@ static int CHUNK_INFLATE_MAX = 131072;
 // structs
 typedef struct {
     PyObject_HEAD
-    PyObject * dict;
+    PyObject * world, * dict;
     int x, z;
 } Chunk;
 
@@ -27,10 +27,15 @@ typedef struct {
     PyObject * level; // level.dat dictionary
     char * path;      // path to the world
     Region * regions;
+
+    // Chunk holding code, probably will be moved
+    PyObject * chunks[100];
+    int chunk_count;
 } World;
 
 // chunk.c
 PyTypeObject minecraft_ChunkType;
+int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds );
 
 // nbt.c
 long swap_endianness( unsigned char * buffer, int bytes );
@@ -46,3 +51,4 @@ void print_region_info( Region * region );
 
 // world.c
 PyTypeObject minecraft_WorldType;
+Region * load_region( World *self, int x, int z );

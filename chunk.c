@@ -11,32 +11,26 @@ Provides functionality for Chunk objects
 
 // Takes a region file stream and a chunk location and finds and decompresses
 // the chunk to the passed buffer
-int decompress_chunk( FILE * region_file, unsigned char * chunk_buffer, int chunkX, int chunkZ )
+int decompress_chunk( unsigned char * region, unsigned char * decompressed, int x, int z )
 {
-    unsigned int offset, chunk_length, compression_type;
-    unsigned char small_buffer[5], compressed_chunk_buffer[1048576];
+    unsigned int header_offset, chunk_offset, chunk_length, compression_type;
+    unsigned char compressed_decompressed[1048576];
 
-    printf("Finding chunk (%d, %d)\n", chunkX, chunkZ);
-    fseek(region_file, 4 * ((chunkX & 31) + (chunkZ & 31) * 32), SEEK_SET);
-    fread(small_buffer, 4, 1, region_file);
+    printf("Finding chunk (%d, %d)\n", x, z);
+    header_offset = 4 * ((x & 31) + (z & 31) * 32);
 
-    offset = swap_endianness(small_buffer, 3) * 4096;
-    if ( offset == 0 )
+    chunk_offset = swap_endianness(region + header_offset, 3) * 4096;
+    if ( chunk_offset == 0 )
         return 1;
 
-    printf("Offset: %d | Length: %d\n", offset, small_buffer[3] * 4096);
+    printf("Offset: %d | Length: %d\n", chunk_offset, *(region + header_offset + 3) * 4096);
 
-    // Seek to start of chunk, copy it into buffer
-    fseek(region_file, offset, SEEK_SET);
-    memset(small_buffer, 0, 5);
-    fread(small_buffer, 5, 1, region_file);
-    chunk_length = swap_endianness(small_buffer, 4);
-    compression_type = swap_endianness(small_buffer + 4, 1);
-    printf("Actual Length: %d\n", chunk_length);
-    printf("Compression scheme: %d\n", compression_type);
+    // Read the chunk length from the start of the chunk
+    chunk_length = swap_endianness(region + chunk_offset, 4);
+    compression_type = *(region + chunk_offset + 4);
+    printf("True Length: %d | Compression: %d\n", chunk_length, compression_type);
 
-    fread(compressed_chunk_buffer, chunk_length - 1, 1, region_file);
-    inf(chunk_buffer, compressed_chunk_buffer, chunk_length - 1, 0);
+    inf(decompressed, region + chunk_offset + 5, chunk_length - 1, 0);
 
     return 0;
 }
@@ -48,55 +42,60 @@ Python object-related code
 */
 void Chunk_dealloc( Chunk *self )
 {
-    Py_DECREF(self->dict);
+    Py_XDECREF(self->world);
+    Py_XDECREF(self->dict);
     self->ob_type->tp_free((PyObject *) self);
 }
 
-/*
-This is probably an inefficient first try.  Basically the plan is:
-1. Check if the region file exists
-2. If it doesn't, create an empty chunk (should still be able to save out)
-3. If it does, we can load it as normal
-*/
-static int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
+int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
 {
-    FILE * fp;
-    PyObject *dict, * old_dict;
-    unsigned char filename[1000], buffer[100000]; // TODO: Temporary
-    int moved, region_x, region_z;
+    Region * region;
+    PyObject * old, * dict, * world;
+    unsigned char buffer[100000]; // TODO: Dynamically allocate
+    int moved, rc;
 
-    if( !PyArg_ParseTuple(args, "ii", &self->x, &self->z) )
+    if( !PyArg_ParseTuple(args, "Oii", &world, &self->x, &self->z) )
         return -1;
 
-    region_x = self->x >> 5;
-    region_z = self->z >> 5;
-    sprintf(filename, "/home/josh/minecraft_new/world/region/r.%d.%d.mca", region_x, region_z);
-    printf("Going to attempt to open %s", filename);
-    
-    fp = fopen(filename, "rb");
-    if( fp != NULL )
+    region = load_region(world, self->x >> 5, self->z >> 5);
+    rc = decompress_chunk(region->buffer, buffer, self->x, self->z);
+
+    if( rc != 0 )
     {
-        decompress_chunk(fp, buffer, self->x, self->z);
-        dump_buffer(buffer, 480);
+        PyErr_Format(PyExc_Exception, "CHUNK EMPTY!");
+        return -1;
     }
-    // else region file doesn't exist, which is ok
-    
+
+    // Read chunk to dictionary
     moved = 0;
-    old_dict = self->dict;
+    old = self->dict;
     dict = get_tag(buffer, -1, &moved);
     Py_INCREF(dict);
     self->dict = dict;
-    Py_XDECREF(old_dict);
+    Py_XDECREF(old);
+
+    // Add reference to chunk's parent, the world
+    old = self->world;
+    Py_INCREF(world);
+    self->world = world;
+    Py_XDECREF(old);
 
     return 0;
 }
 
 static int Chunk_save( Chunk *self )
 {
-
+    /*
+    1. Call load region
+    2. Write chunk to temporary buffer
+    3. Deflate chunk back to proper spot in region
+    4. Done!
+    */
+    return 0;
 }
 
 static PyMemberDef Chunk_members[] = {
+    {"world", T_OBJECT, offsetof(Chunk, world), 0, "World the chunk lives in"},
     {"dict", T_OBJECT, offsetof(Chunk, dict), 0, "Chunk attribute dictionary"},
     {"x", T_INT, offsetof(Chunk, x), 0, "Chunk X position"},
     {"z", T_INT, offsetof(Chunk, z), 0, "Chunk Z position"},
