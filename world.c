@@ -8,6 +8,7 @@ World object definition and functionality
 #include <structmember.h>
 #include <stdbool.h>
 #include "minecraft.h"
+#include "tags.h"
 
 #define MAX_CHUNKS              100
 #define MAX_REGIONS             8
@@ -85,6 +86,8 @@ Region * load_region( World *self, int x, int z )
         region->buffer = calloc(size, 1);
         region->buffer_size = size;
         region->current_size = st.st_size;
+
+        fread(region->buffer, 1, st.st_size, fp);
 
         fclose(fp);
     }
@@ -174,15 +177,14 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
 }
 
 /*
-TODO: These need to be expanded.  Basically I'd expect to be able to put a
-block and get a block without needing to deal with chunks at all.
+Get a block in the world
 */
 static PyObject * World_get_block( World *self, PyObject *args, PyObject *kwds )
 {
     PyObject * chunk, * chunk_args;
     int x, y, z;
 
-   if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
+    if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
     {
         PyErr_Format(PyExc_Exception, "Cannot parse parameters");
 
@@ -263,10 +265,24 @@ static PyObject * World_save_region( World *self, PyObject *args, PyObject *kwds
     return Py_None;
 }
 
-static PyObject * World_load_chunk( World *self, PyObject *args, PyObject *kwds )
+static PyObject * World_load_chunk( World *self, PyObject *args )
 {
-    // Make sure region file chunk would exist in exists
-    return PyObject_CallObject((PyObject *) &minecraft_ChunkType, args); // Reference?
+    PyObject * chunk, * chunk_args;
+    int x, z;
+
+    if( !PyArg_ParseTuple(args, "ii", &x, &z) )
+    {
+        PyErr_Format(PyExc_Exception, "Cannot parse parameters");
+
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    chunk_args = Py_BuildValue("Oii", (PyObject *) self, x, z);
+    chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
+    Py_DECREF(chunk_args);
+
+    return chunk;
 }
 
 // Right now, just save out level.dat
@@ -279,7 +295,7 @@ static PyObject * World_save( World *self )
 
     uncompressed = calloc(10000, 1);
     compressed = calloc(5000, 1);
-    size = write_tags(uncompressed, self->level);
+    size = write_tags(uncompressed, self->level, leveldat_tags);
     dump_buffer(uncompressed, 480);
 
     def(compressed, uncompressed, size, 1);

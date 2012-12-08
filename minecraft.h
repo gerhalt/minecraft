@@ -10,6 +10,13 @@ static int CHUNK_DEFLATE_MAX = 65536;
 static int CHUNK_INFLATE_MAX = 131072;
 
 // structs
+typedef struct TagType{
+    char * name;
+    int id;
+    bool empty_byte_list;
+    unsigned char sub_tag_id; // Optional, for List tag
+} TagType;
+
 typedef struct {
     PyObject_HEAD
     PyObject * world, * dict;
@@ -44,7 +51,7 @@ void dump_buffer( unsigned char * buffer, int count );
 int inf( unsigned char * dst, unsigned char * src, int bytes, int mode );
 int def( unsigned char * dst, unsigned char * src, int bytes, int mode );
 PyObject * get_tag( unsigned char * tag, char tag_id, int * moved );
-int write_tags( unsigned char * dst, PyObject * dict );
+int write_tags( unsigned char * dst, PyObject * dict, TagType tags[] );
 
 // region.c
 void print_region_info( Region * region );

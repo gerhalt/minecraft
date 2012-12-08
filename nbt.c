@@ -13,7 +13,66 @@ Decompression and NBT reading utilities
 #include "tags.h"
 #include "zlib.h"
 
-int write_tags_header( unsigned char * dst, PyObject * dict, int * moved );
+TagType leveldat_tags[] = {
+    {"Data", TAG_COMPOUND},
+    {"version", TAG_INT},
+    {"initialized", TAG_BYTE},
+    {"LevelName", TAG_STRING},
+    {"generatorName", TAG_STRING},
+    {"generatorVersion", TAG_INT},
+    {"generatorOptions", TAG_STRING},
+    {"RandomSeed", TAG_LONG},
+    {"MapFeatures", TAG_BYTE},
+    {"LastPlayed", TAG_LONG},
+    {"SizeOnDisk", TAG_LONG},
+    {"allowCommands", TAG_BYTE},
+    {"hardcore", TAG_BYTE},
+    {"GameType", TAG_INT},
+    {"Time", TAG_LONG},
+    {"DayTime", TAG_LONG},
+    {"SpawnX", TAG_INT},
+    {"SpawnY", TAG_INT},
+    {"SpawnZ", TAG_INT},
+    {"raining", TAG_BYTE},
+    {"rainTime", TAG_INT},
+    {"thundering", TAG_BYTE},
+    {"thunderTime", TAG_INT},
+    {"Player", TAG_COMPOUND},
+    {"GameRules", TAG_COMPOUND},
+    {"commandBlockOutput", TAG_STRING},
+    {"doFireTick", TAG_STRING},
+    {"doMobLoot", TAG_STRING},
+    {"doMobSpawning", TAG_STRING},
+    {"doTileDrops", TAG_STRING},
+    {"keepInventory", TAG_STRING},
+    {"mobGriefing", TAG_STRING},
+    {NULL, NULL} // Sentinel
+};
+
+TagType chunk_tags[] = {
+    // Basic chunk tags
+    {"Level", TAG_COMPOUND},
+    {"xPos", TAG_INT},
+    {"zPos", TAG_INT},
+    {"LastUpdate", TAG_LONG},
+    {"TerrainPopulated", TAG_BYTE},
+    {"Biomes", TAG_BYTE_ARRAY},
+    {"HeightMap", TAG_INT_ARRAY},
+    {"Sections", TAG_LIST, false, TAG_COMPOUND},
+    {"Y", TAG_BYTE},
+    {"Blocks", TAG_BYTE_ARRAY},
+    {"Add", TAG_BYTE_ARRAY},
+    {"Data", TAG_BYTE_ARRAY},
+    {"BlockLight", TAG_BYTE_ARRAY},
+    {"SkyLight", TAG_BYTE_ARRAY},
+    {"Entities", TAG_LIST, true, TAG_BYTE_ARRAY},
+    {"TileEntities", TAG_LIST, true, TAG_BYTE_ARRAY},
+    {"TileTicks", TAG_LIST, false, TAG_COMPOUND},
+    // TODO: Fill in other tags
+    {NULL, NULL}
+};
+
+int write_tags_header( unsigned char * dst, PyObject * dict, TagType tags[], int * moved );
 
 // Takes a number of bytes (in big-endian order), starting at a given location,
 // and returns the integer they represent
@@ -60,7 +119,7 @@ void dump_buffer( unsigned char * buffer, int count )
         if ( i % 16 == 0 )
             printf(" %4i ", i); 
 
-        printf("%2x", buffer[i]);
+        printf("%02x", buffer[i]);
 
         if ( i % 4 == 3 )
             printf(" ");
@@ -96,7 +155,7 @@ int inf( unsigned char * dst, unsigned char * src, int bytes, int mode )
     inflateInit2(&strm, MAX_WBITS + mode * 32); // + 32 bits for header detection and gzip
     ret = inflate(&strm, Z_FINISH);
     inflateEnd(&strm);
-    
+
     if ( ret != Z_STREAM_END )
         PyErr_Format(PyExc_Exception, "Unable to decompress (RC: %d | Error: %s)", ret, strm.msg);
 
@@ -234,18 +293,19 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
             list_id = tag[0];
             size = swap_endianness(tag + 1, sizeof(int));
             tag += 1 + sizeof(int);
+            *moved += 1 + sizeof(int);
 
             payload = PyList_New(size);
-            sub_moved = 0;
             for( i = 0; i < size; i++ )
             {
                 PyObject * list_item;
 
+                sub_moved = 0;
                 list_item = get_tag(tag, list_id, &sub_moved);
                 PyList_SET_ITEM(payload, i, list_item);
                 tag += sub_moved;
+                *moved += sub_moved;
             }
-            *moved += 5 + sub_moved;
             break;
 
         case TAG_COMPOUND: // Compound
@@ -272,7 +332,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
 
                 sub_tag_name = calloc(sub_tag_name_length + 1, 1);
                 strncpy(sub_tag_name, (char *) tag + 3, sub_tag_name_length);
-                printf("Tag ID: %d | Name: %.*s\n", sub_id, sub_tag_name_length, sub_tag_name);
+                // printf("Tag ID: %d | Name: %.*s\n", sub_id, sub_tag_name_length, sub_tag_name);
 
                 tag += 3 + sub_tag_name_length;
                 sub_moved = 0;
@@ -303,7 +363,7 @@ write_tags
 returns
   total size of written tags, including root tag
 */
-int write_tags( unsigned char * dst, PyObject * dict )
+int write_tags( unsigned char * dst, PyObject * dict, TagType tags[] )
 {
     int moved;
 
@@ -313,7 +373,7 @@ int write_tags( unsigned char * dst, PyObject * dict )
     dst += 1 + sizeof(short);
 
     moved = 0;
-    write_tags_header(dst, dict, &moved);
+    write_tags_header(dst, dict, tags, &moved);
     dst += moved;
 
     // Write the end tag
@@ -324,8 +384,9 @@ int write_tags( unsigned char * dst, PyObject * dict )
 }
 
 
-int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payload, int * moved )
+int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payload, TagType tags[], int * moved )
 {
+    printf("Name: %s | ID: %d\n", tag_info.name, tag_info.id);
     switch(tag_info.id)
     {
         PyObject * list_item_tmp;
@@ -431,13 +492,13 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
 
         case TAG_LIST:
             // If we hit this, the extra fields for the tag_info should be set
-            *dst = tag_info.sub_tag_id;
             size = PyList_Size(payload);
 
             // Special case: if the list tag is empty, some list tags will 
             // still be written to the file as a byte array
             if( size == 0 && tag_info.empty_byte_list )
             {
+                printf("EMPTY LIST SHOULD BE SET AS BYTE ARRAY\n");
                 *dst = TAG_BYTE_ARRAY; 
                 *moved += 5; // 1 + 4 for the empty byte array
                 break;
@@ -453,9 +514,10 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
                 TagType sub_tag_info;
 
                 sub_moved = 0;
+                sub_tag_info.name = ""; // Sub tag name doesn't matter
                 sub_tag_info.id = tag_info.sub_tag_id;
                 list_item_tmp = PyList_GetItem(payload, i);
-                write_tags_payload(dst, sub_tag_info, list_item_tmp, &sub_moved);
+                write_tags_payload(dst, sub_tag_info, list_item_tmp, tags, &sub_moved);
 
                 dst += sub_moved;
                 *moved += sub_moved;
@@ -464,7 +526,7 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
 
         case TAG_COMPOUND:
             sub_moved = 0;
-            write_tags_header(dst, payload, &sub_moved);
+            write_tags_header(dst, payload, tags, &sub_moved);
             memset(dst + sub_moved, 0, 1); // Write TAG_END
             *moved += sub_moved + 1;
             break;
@@ -477,7 +539,7 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
 }
 
 // TODO: Buffer size might be an issue
-int write_tags_header( unsigned char * dst, PyObject * dict, int * moved )
+int write_tags_header( unsigned char * dst, PyObject * dict, TagType tags[], int * moved )
 {
     PyObject * keys;
     int i, size;
@@ -500,7 +562,7 @@ int write_tags_header( unsigned char * dst, PyObject * dict, int * moved )
         // Match the tag name to a tag type
         for( j = 0;; j++ )
         {
-            tag_info = leveldat_tags[j];
+            tag_info = tags[j];
             if( tag_info.name == NULL)
             {
                 PyErr_Format(PyExc_Exception, "\'%s\' is not a valid tag name", keystr);
@@ -522,7 +584,7 @@ int write_tags_header( unsigned char * dst, PyObject * dict, int * moved )
 
         // Write the tag
         sub_moved = 0;
-        write_tags_payload(dst + 3 + len, tag_info, value, &sub_moved);
+        write_tags_payload(dst + 3 + len, tag_info, value, tags, &sub_moved);
 
         dst += 3 + len + sub_moved;
         *moved += 3 + len + sub_moved;

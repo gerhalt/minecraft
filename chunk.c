@@ -8,20 +8,24 @@ Provides functionality for Chunk objects
 #include <structmember.h>
 #include <stdbool.h>
 #include "minecraft.h"
+#include "tags.h"
 
 // Takes a region file stream and a chunk location and finds and decompresses
 // the chunk to the passed buffer
 int decompress_chunk( unsigned char * region, unsigned char * decompressed, int x, int z )
 {
     unsigned int header_offset, chunk_offset, chunk_length, compression_type;
-    unsigned char compressed_decompressed[1048576];
+    int rc;
 
     printf("Finding chunk (%d, %d)\n", x, z);
     header_offset = 4 * ((x & 31) + (z & 31) * 32);
 
     chunk_offset = swap_endianness(region + header_offset, 3) * 4096;
     if ( chunk_offset == 0 )
+    {
+        printf("Chunk is empty, crap!\n");
         return 1;
+    }
 
     printf("Offset: %d | Length: %d\n", chunk_offset, *(region + header_offset + 3) * 4096);
 
@@ -30,7 +34,7 @@ int decompress_chunk( unsigned char * region, unsigned char * decompressed, int 
     compression_type = *(region + chunk_offset + 4);
     printf("True Length: %d | Compression: %d\n", chunk_length, compression_type);
 
-    inf(decompressed, region + chunk_offset + 5, chunk_length - 1, 0);
+    rc = inf(decompressed, region + chunk_offset + 5, chunk_length - 1, 0);
 
     return 0;
 }
@@ -51,11 +55,13 @@ int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
 {
     Region * region;
     PyObject * old, * dict, * world;
-    unsigned char buffer[100000]; // TODO: Dynamically allocate
+    unsigned char * buffer; // TODO: Dynamically allocate
     int moved, rc;
 
     if( !PyArg_ParseTuple(args, "Oii", &world, &self->x, &self->z) )
         return -1;
+
+    buffer = calloc(1000000, 1);
 
     region = load_region(world, self->x >> 5, self->z >> 5);
     rc = decompress_chunk(region->buffer, buffer, self->x, self->z);
@@ -80,18 +86,36 @@ int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
     self->world = world;
     Py_XDECREF(old);
 
+    free(buffer);
+
     return 0;
 }
 
-static int Chunk_save( Chunk *self )
+static PyObject * Chunk_save( Chunk *self )
 {
+    Region * region;
+    unsigned char * buffer; // TODO: Remove, definitely should be a dynamic call
+    int size;
+
+    buffer = calloc(1000000, 1);
+
+    // Load the region, making sure we convert from chunk to region coordinates
+    region = load_region(self->world, self->x >> 5, self->z >> 5);
+    size = write_tags(buffer, self->dict, chunk_tags);
+
+    printf("Chunk saved, %d bytes written\n", size); 
+    dump_buffer(buffer, 480);
+
+    free(buffer);
+
     /*
-    1. Call load region
     2. Write chunk to temporary buffer
     3. Deflate chunk back to proper spot in region
     4. Done!
     */
-    return 0;
+
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 static PyMemberDef Chunk_members[] = {

@@ -10,6 +10,7 @@ Functions to writing to region files, mostly to be used by chunks when saving
 #include <stdio.h>
 #include <string.h>
 #include "minecraft.h"
+#include "tags.h"
 
 void print_region_info( Region * region )
 {
@@ -50,7 +51,7 @@ int update_region( unsigned char * region_buffer, Chunk *chunk )
     // Write out the chunk to a temporary buffer, as a staging ground for
     // compression directly to the region_buffer
     uncompressed_chunk = malloc(10000);
-    size = write_tags(uncompressed_chunk, chunk->dict);
+    size = write_tags(uncompressed_chunk, chunk->dict, chunk_tags);
     printf("Chunk (size %d) written to intermediate buffer!\n", size);
     dump_buffer(uncompressed_chunk, 480);
 
