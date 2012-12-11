@@ -49,7 +49,7 @@ long swap_endianness( unsigned char * buffer, int bytes );
 void swap_endianness_in_memory( unsigned char * buffer, int bytes );
 void dump_buffer( unsigned char * buffer, int count );
 int inf( unsigned char * dst, unsigned char * src, int bytes, int mode );
-int def( unsigned char * dst, unsigned char * src, int bytes, int mode );
+int def( unsigned char * dst, unsigned char * src, int bytes, int mode, int * size );
 PyObject * get_tag( unsigned char * tag, char tag_id, int * moved );
 int write_tags( unsigned char * dst, PyObject * dict, TagType tags[] );
 

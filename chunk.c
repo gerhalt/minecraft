@@ -76,6 +76,7 @@ int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
     moved = 0;
     old = self->dict;
     dict = get_tag(buffer, -1, &moved);
+    printf("Chunk moved: %d\n", moved);
     Py_INCREF(dict);
     self->dict = dict;
     Py_XDECREF(old);
@@ -95,24 +96,19 @@ static PyObject * Chunk_save( Chunk *self )
 {
     Region * region;
     unsigned char * buffer; // TODO: Remove, definitely should be a dynamic call
-    int size;
-
-    buffer = calloc(1000000, 1);
+    int size, rc;
 
     // Load the region, making sure we convert from chunk to region coordinates
     region = load_region(self->world, self->x >> 5, self->z >> 5);
-    size = write_tags(buffer, self->dict, chunk_tags);
-
-    printf("Chunk saved, %d bytes written\n", size); 
-    dump_buffer(buffer, 480);
-
-    free(buffer);
+    update_region(region, self);
 
     /*
     2. Write chunk to temporary buffer
     3. Deflate chunk back to proper spot in region
     4. Done!
     */
+
+    free(buffer);
 
     Py_INCREF(Py_None);
     return Py_None;

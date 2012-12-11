@@ -291,14 +291,15 @@ static PyObject * World_save( World *self )
     FILE * fp;
     char filename[1000];
     unsigned char * compressed, * uncompressed;
-    int size;
+    int size, deflated_size;
 
     uncompressed = calloc(10000, 1);
     compressed = calloc(5000, 1);
     size = write_tags(uncompressed, self->level, leveldat_tags);
     dump_buffer(uncompressed, 480);
 
-    def(compressed, uncompressed, size, 1);
+    deflated_size = 0;
+    def(compressed, uncompressed, size, 1, &deflated_size);
 
     sprintf(filename, "%s/level.dat", self->path);
     fp = fopen(filename, "wb");

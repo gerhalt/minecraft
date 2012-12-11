@@ -171,7 +171,7 @@ Deflate
     0   - normal (zlib)
     1   - gzip (including headers)
 */
-int def( unsigned char * dst, unsigned char * src, int bytes, int mode )
+int def( unsigned char * dst, unsigned char * src, int bytes, int mode, int * size )
 {
     int ret;
     z_stream strm;
@@ -197,6 +197,7 @@ int def( unsigned char * dst, unsigned char * src, int bytes, int mode )
     if ( ret != Z_STREAM_END )
         PyErr_Format(PyExc_Exception, "Unable to compress (RC: %d | Error: %s)", ret, strm.msg);
 
+    *size = strm.total_out;
     return ret;
 }
 
@@ -386,7 +387,7 @@ int write_tags( unsigned char * dst, PyObject * dict, TagType tags[] )
 
 int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payload, TagType tags[], int * moved )
 {
-    printf("Name: %s | ID: %d\n", tag_info.name, tag_info.id);
+    // printf("Name: %s | ID: %d\n", tag_info.name, tag_info.id);
     switch(tag_info.id)
     {
         PyObject * list_item_tmp;
@@ -498,7 +499,6 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
             // still be written to the file as a byte array
             if( size == 0 && tag_info.empty_byte_list )
             {
-                printf("EMPTY LIST SHOULD BE SET AS BYTE ARRAY\n");
                 *dst = TAG_BYTE_ARRAY; 
                 *moved += 5; // 1 + 4 for the empty byte array
                 break;
