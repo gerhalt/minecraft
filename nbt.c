@@ -450,7 +450,7 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
             byte_array_tmp = PyByteArray_AsString(payload);
             memcpy(dst + sizeof(int), byte_array_tmp, size);
 
-            *moved += size;
+            *moved += sizeof(int) + size;
             break;
 
         case TAG_INT_ARRAY:
@@ -509,6 +509,7 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
                 break;
             }
 
+            *dst = tag_info.sub_tag_id;
             memcpy(dst + 1, &size, 4);
             swap_endianness_in_memory(dst + 1, 4);
             dst += 5;
