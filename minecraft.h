@@ -19,6 +19,12 @@ typedef struct TagType{
 
 typedef struct {
     PyObject_HEAD
+    unsigned short id;
+    unsigned char data, light, skylight;
+} Block;
+
+typedef struct {
+    PyObject_HEAD
     PyObject * world, * dict;
     int x, z;
 } Chunk;
@@ -39,6 +45,10 @@ typedef struct {
     PyObject * chunks[100];
     int chunk_count;
 } World;
+
+// block.c
+PyTypeObject minecraft_BlockType;
+int Block_init( Block *self, PyObject *args, PyObject *kwds );
 
 // chunk.c
 PyTypeObject minecraft_ChunkType;

@@ -72,6 +72,8 @@ int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
         return -1;
     }
 
+    // dump_buffer(buffer, 4800);
+
     // Read chunk to dictionary
     moved = 0;
     old = self->dict;
@@ -102,14 +104,170 @@ static PyObject * Chunk_save( Chunk *self )
     region = load_region(self->world, self->x >> 5, self->z >> 5);
     update_region(region, self);
 
-    /*
-    2. Write chunk to temporary buffer
-    3. Deflate chunk back to proper spot in region
-    4. Done!
-    */
-
     free(buffer);
 
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+char get_nibble( char * byte_array, int index )
+{
+    return index % 2 == 0 ? byte_array[index / 2] & 0x0F : byte_array[index / 2]>>4 & 0x0F;
+}
+
+// Currently, it is expected that passed arguments will be in coordinates
+// relative to the chunk
+static PyObject * Chunk_get_block( Chunk *self, PyObject *args )
+{
+    PyObject * block_args, * block, * level, * sections, * section;
+    int i, size, x, y, z;
+
+    if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
+    {
+        PyErr_Format(PyExc_Exception, "Unable to parse arguments.");
+
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    level = PyDict_GetItemString(self->dict, "Level");
+    sections = PyDict_GetItemString(level, "Sections");
+    size = PyList_Size(sections);
+    section = NULL;
+    for( i = 0; i < size; i++ )
+    {
+        PyObject * current_section;
+        int sub_y;
+
+        current_section = PyList_GetItem(sections, i);
+        sub_y = PyInt_AsLong(PyDict_GetItemString(current_section, "Y"));
+        if( sub_y == y / 16 )
+        {
+            section = current_section;
+            break;
+        }
+    }
+
+    if( section == NULL )
+        block_args = Py_BuildValue("HBBB", 0, 0, 0, 0);
+    else
+    {
+        int section_y, position;
+        unsigned short * id;
+        unsigned char * byte_array, data, light, skylight;
+
+        data = light = skylight = 0;
+        section_y = y % 16;
+        position = section_y * 16 * 16 + z * 16 + x;
+
+        // We know it will contain the "Blocks" byte array
+        byte_array = PyDict_GetItemString(section, "Blocks");
+        id = byte_array[position];
+
+        if( PyDict_Contains(section, PyString_FromString("Add")) )
+        {
+            byte_array = PyDict_GetItemString(section, "Add");
+            id += get_nibble(byte_array, position) << 8;
+        }
+
+        if( PyDict_Contains(section, PyString_FromString("Data")) )
+        {
+            byte_array = PyDict_GetItemString(section, "Data");
+            data = get_nibble(byte_array, position);
+        }
+        
+        if( PyDict_Contains(section, PyString_FromString("BlockLight")) )
+        {
+            byte_array = PyDict_GetItemString(section, "BlockLight");
+            light = get_nibble(byte_array, position);
+        }
+        
+        if( PyDict_Contains(section, PyString_FromString("SkyLight")) )
+        {
+            byte_array = PyDict_GetItemString(section, "SkyLight");
+            skylight = get_nibble(byte_array, position);
+        }
+
+        block_args = Py_BuildValue("HBBB", id, data, light, skylight);
+    }
+
+    block_args = Py_BuildValue("HBBB", 0, 0, 0, 0);
+    block = PyObject_CallObject((PyObject *) &minecraft_BlockType, block_args);
+    Py_INCREF(block);
+    return block;
+}
+
+// Currently, it is expected that passed arguments will be in coordinates
+// relative to the chunk
+static PyObject * Chunk_put_block( Chunk *self, PyObject *args )
+{
+    PyObject * level, * sections, * section;
+    Block * block;
+    int i, size, position, x, y, z;
+    char * byte_array;
+
+    if( !PyArg_ParseTuple(args, "iiiO", &x, &y, &z, &block) )
+    {
+        PyErr_Format(PyExc_Exception, "Unable to parse arguments.");
+
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    level = PyDict_GetItemString(self->dict, "Level");
+    sections = PyDict_GetItemString(level, "Sections");
+    size = PyList_Size(sections);
+    section = NULL;
+    for( i = 0; i < size; i++ )
+    {
+        PyObject * current_section;
+        int sub_y;
+
+        current_section = PyList_GetItem(sections, i);
+        sub_y = PyInt_AsLong(PyDict_GetItemString(current_section, "Y"));
+        if( sub_y == y / 16 )
+        {
+            section = current_section;
+            break;
+        }
+    }
+
+    // If a section doesn't exist where this block should go, create it
+    if( section == NULL )
+    {
+        PyObject * new;
+        unsigned char * byte_array;
+
+        printf("Creating new section!\n");
+
+        section = PyDict_New();
+        Py_INCREF(section);
+        
+        new = PyInt_FromLong(y / 16); // This should end up not needing to be INCREF'd I think
+        Py_INCREF(new);
+        PyDict_SetItemString(section, "Y", new);
+
+        byte_array = calloc(4096, 1);
+        new = PyByteArray_FromStringAndSize(byte_array, 4096);
+        Py_INCREF(new);
+        PyDict_SetItemString(section, "Data", new);
+        free(byte_array);
+
+        PyList_Append(sections, section);
+    }
+
+    position = (y % 16) * 16 * 16 + z * 16 + x;
+    byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "Data"));
+    byte_array[position] = (Block *) block->id;
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+// TODO: Placeholder
+// Recalculate lighting and anything else that requires calculation
+static PyObject * Chunk_calculate( Chunk *self )
+{
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -124,6 +282,8 @@ static PyMemberDef Chunk_members[] = {
 
 static PyMethodDef Chunk_methods[] = {
     {"save", (PyCFunction) Chunk_save, METH_NOARGS, "Save the chunk to file"},
+    {"get_block", (PyCFunction) Chunk_get_block, METH_VARARGS, "Get a block from within the chunk"},
+    {"put_block", (PyCFunction) Chunk_put_block, METH_VARARGS, "Put a block into the chunk, at the given location"},
     {NULL}
 };
 

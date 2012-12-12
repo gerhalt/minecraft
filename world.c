@@ -145,9 +145,6 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
         fread(src, 1, size, fp);
         inf(dst, src, size, 1);
 
-        printf("\n\nOriginal, unpacked data:\n");
-        dump_buffer(dst, 480);
-
         moved = 0;
         level = get_tag(dst, -1, &moved);
 

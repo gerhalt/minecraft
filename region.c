@@ -96,13 +96,13 @@ int update_region( Region * region, Chunk * chunk )
         // Shift chunks after this chunk after if needed
         if( location != 0 )
         {
-            unsigned char * next_chunk, next_chunk_after;
+            void * next_chunk, * next_chunk_after;
             int num;
 
             num = (last_offset + last_sector_count - (location + sector_count)) * 4096;
             next_chunk = region->buffer + (location + sector_count) * 4096;
             next_chunk_after = region->buffer + (location + sector_count + difference) * 4096;
-            printf("Shifting %d bytes worth of chunk data by %d\n", num, difference * 4096);
+            printf("Shifting %d bytes worth of chunk data from %p to %p\n", num, next_chunk, next_chunk_after);
 
             memmove(next_chunk_after, next_chunk, num);
 
@@ -114,9 +114,7 @@ int update_region( Region * region, Chunk * chunk )
                 o = swap_endianness(region->buffer + i, 3);
                 if( o > location )
                 {
-                    printf("Location: %d (old), ", o);
                     o += difference;
-                    printf("%d (new\n", o);
                     memcpy(region->buffer + i, &o, 3);
                     swap_endianness_in_memory(region->buffer + i, 3);
                 }
@@ -147,7 +145,7 @@ Save the region to file
   *region - region information to save
   path    - path to directory that should contain region file
 */
-int save_region( Region *region, char * path )
+int save_region( Region *region, char *path )
 {
     FILE * fp;
     char filename[1000]; // TODO: Dynamic

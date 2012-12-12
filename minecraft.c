@@ -63,6 +63,10 @@ PyMODINIT_FUNC initminecraft(void)
 {
     PyObject *m;
     
+    minecraft_BlockType.tp_new = PyType_GenericNew;
+    if( PyType_Ready(&minecraft_BlockType) < 0 )
+        return;
+
     minecraft_ChunkType.tp_new = PyType_GenericNew;
     if( PyType_Ready(&minecraft_ChunkType) < 0 )
         return;
@@ -73,6 +77,8 @@ PyMODINIT_FUNC initminecraft(void)
 
     m = Py_InitModule3("minecraft", MinecraftMethods, "Minecraft module");
 
+    Py_INCREF(&minecraft_BlockType);
+    PyModule_AddObject(m, "Block", (PyObject *) &minecraft_BlockType);
     Py_INCREF(&minecraft_ChunkType);
     PyModule_AddObject(m, "Chunk", (PyObject *) &minecraft_ChunkType);
     Py_INCREF(&minecraft_WorldType);
