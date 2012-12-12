@@ -112,7 +112,8 @@ void swap_endianness_in_memory( unsigned char * buffer, int bytes )
 // Takes a buffer and prints it prettily
 void dump_buffer( unsigned char * buffer, int count )
 {
-    int i;
+    char string[16];
+    int i, j;
 
     for( i = 0; i < count; i++)
     {
@@ -120,11 +121,15 @@ void dump_buffer( unsigned char * buffer, int count )
             printf(" %4i ", i); 
 
         printf("%02x", buffer[i]);
+        if( buffer[i] >= 0x20 && buffer[i] <= 0x7E )
+            string[i % 16] = buffer[i];
+        else
+            string[i % 16] = 0x2E;
 
         if ( i % 4 == 3 )
             printf(" ");
         if ( i % 16 == 15 )
-            printf("\n");
+            printf(" |%.*s|\n", 16, string);
     }
     printf("\n");
 }
@@ -580,7 +585,7 @@ int write_tags_header( unsigned char * dst, PyObject * dict, TagType tags[], int
         memcpy(dst, &tag_info.id, 1);
         memcpy(dst + 1, &len, 2); 
         swap_endianness_in_memory(dst + 1, 2);
-        memcpy(dst + 3 , tag_info.name, len);
+        memcpy(dst + 3, tag_info.name, len);
 
         // Write the tag
         sub_moved = 0;
