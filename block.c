@@ -22,14 +22,14 @@ void Block_dealloc( Block *self )
 int Block_init( Block *self, PyObject *args, PyObject *kwds )
 {
     unsigned short id;
-    unsigned char data, light, skylight;
+    unsigned char data, blocklight, skylight;
 
-    if( !PyArg_ParseTuple(args, "HBBB", &id, &data, &light, &skylight) )
+    if( !PyArg_ParseTuple(args, "HBBB", &id, &data, &blocklight, &skylight) )
         return -1;
 
     self->id = id; 
     self->data = data;
-    self->light = light;
+    self->blocklight = blocklight;
     self->skylight = skylight;
 
     return 0;
@@ -38,7 +38,7 @@ int Block_init( Block *self, PyObject *args, PyObject *kwds )
 static PyMemberDef Block_members[] = {
     {"id", T_USHORT, offsetof(Block, id), 0, "Block ID, twelve bits"},
     {"data", T_UBYTE, offsetof(Block, data), 0, "Four bits of additional block data"},
-    {"light", T_UBYTE, offsetof(Block, light), 0, "Four bits recording the amount of block-emitted light in each block"},
+    {"blocklight", T_UBYTE, offsetof(Block, blocklight), 0, "Four bits recording the amount of block-emitted light in each block"},
     {"skylight", T_UBYTE, offsetof(Block, skylight), 0, "Four bits recording the amount of sunlight or moonlight hitting each block"},
     {NULL}
 };

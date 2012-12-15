@@ -20,7 +20,7 @@ typedef struct TagType{
 typedef struct {
     PyObject_HEAD
     unsigned short id;
-    unsigned char data, light, skylight;
+    unsigned char data, blocklight, skylight;
 } Block;
 
 typedef struct {

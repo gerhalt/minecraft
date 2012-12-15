@@ -115,6 +115,16 @@ char get_nibble( char * byte_array, int index )
     return index % 2 == 0 ? byte_array[index / 2] & 0x0F : byte_array[index / 2]>>4 & 0x0F;
 }
 
+void set_nibble( char * byte_array, int index, char value )
+{
+    char existing;
+
+    value = value & 0x0F; // Ensure only the lower 4 bits are set
+    value = index % 2 == 0 ? value : value << 4;
+    existing = index % 2 == 0 ? byte_array[index / 2] & 0xF0 : byte_array[index / 2] & 0x0F;
+    byte_array[index / 2] = existing | value;
+}
+
 // Currently, it is expected that passed arguments will be in coordinates
 // relative to the chunk
 static PyObject * Chunk_get_block( Chunk *self, PyObject *args )
@@ -154,9 +164,9 @@ static PyObject * Chunk_get_block( Chunk *self, PyObject *args )
     {
         int section_y, position;
         unsigned short * id;
-        unsigned char * byte_array, data, light, skylight;
+        unsigned char * byte_array, data, blocklight, skylight;
 
-        data = light = skylight = 0;
+        data = blocklight = skylight = 0;
         section_y = y % 16;
         position = section_y * 16 * 16 + z * 16 + x;
 
@@ -179,7 +189,7 @@ static PyObject * Chunk_get_block( Chunk *self, PyObject *args )
         if( PyDict_Contains(section, PyString_FromString("BlockLight")) )
         {
             byte_array = PyDict_GetItemString(section, "BlockLight");
-            light = get_nibble(byte_array, position);
+            blocklight = get_nibble(byte_array, position);
         }
         
         if( PyDict_Contains(section, PyString_FromString("SkyLight")) )
@@ -188,7 +198,7 @@ static PyObject * Chunk_get_block( Chunk *self, PyObject *args )
             skylight = get_nibble(byte_array, position);
         }
 
-        block_args = Py_BuildValue("HBBB", id, data, light, skylight);
+        block_args = Py_BuildValue("HBBB", id, data, blocklight, skylight);
     }
 
     block_args = Py_BuildValue("HBBB", 0, 0, 0, 0);
@@ -238,27 +248,69 @@ static PyObject * Chunk_put_block( Chunk *self, PyObject *args )
         PyObject * new;
         unsigned char * byte_array;
 
-        printf("Creating new section!\n");
+        new = PyInt_FromLong(y / 16); // This should end up not needing to be INCREF'd I think
+        printf("Creating new section! %d\n", new);
 
         section = PyDict_New();
         Py_INCREF(section);
         
-        new = PyInt_FromLong(y / 16); // This should end up not needing to be INCREF'd I think
         Py_INCREF(new);
         PyDict_SetItemString(section, "Y", new);
 
+        // Add doesn't necessarily exist, so we don't need to account for it
+
+        // Data
         byte_array = calloc(4096, 1);
         new = PyByteArray_FromStringAndSize(byte_array, 4096);
         Py_INCREF(new);
+        PyDict_SetItemString(section, "Blocks", new);
+        free(byte_array);
+
+        // Data, BlockLight, and SkyLight
+        byte_array = calloc(2048, 1);
+        new = PyByteArray_FromStringAndSize(byte_array, 2048);
+        Py_INCREF(new);
         PyDict_SetItemString(section, "Data", new);
+        new = PyByteArray_FromStringAndSize(byte_array, 2048);
+        Py_INCREF(new);
+        PyDict_SetItemString(section, "BlockLight", new);
+        new = PyByteArray_FromStringAndSize(byte_array, 2048);
+        Py_INCREF(new);
+        PyDict_SetItemString(section, "SkyLight", new);
         free(byte_array);
 
         PyList_Append(sections, section);
     }
 
     position = (y % 16) * 16 * 16 + z * 16 + x;
+    byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "Blocks"));
+    byte_array[position] = (char) block->id;
+
+    // set "Add", only if the block ID is greater than 0x0F
+    if( block->id >> 8 != 0 )
+    {
+        if( PyDict_Contains(section, PyString_FromString("Add")) == 0 )
+        {
+            PyObject * new;
+
+            byte_array = calloc(2048, 1);
+            new = PyByteArray_FromStringAndSize(byte_array, 2048);
+            Py_INCREF(new);
+
+            PyDict_SetItemString(section, "Add", new);
+            free(byte_array);
+        }
+
+        byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "Add"));
+        set_nibble(byte_array, position, block->data >> 8);
+    }
+
     byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "Data"));
-    byte_array[position] = (Block *) block->id;
+    set_nibble(byte_array, position, block->data);
+    byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "BlockLight"));
+    set_nibble(byte_array, position, block->blocklight);
+    byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "SkyLight"));
+    set_nibble(byte_array, position, block->skylight);
 
     Py_INCREF(Py_None);
     return Py_None;
