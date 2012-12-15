@@ -46,7 +46,7 @@ TagType leveldat_tags[] = {
     {"doTileDrops", TAG_STRING},
     {"keepInventory", TAG_STRING},
     {"mobGriefing", TAG_STRING},
-    {NULL, NULL} // Sentinel
+    {NULL} // Sentinel
 };
 
 TagType chunk_tags[] = {
@@ -69,7 +69,7 @@ TagType chunk_tags[] = {
     {"TileEntities", TAG_LIST, true, TAG_BYTE_ARRAY},
     {"TileTicks", TAG_LIST, false, TAG_COMPOUND},
     // TODO: Fill in other tags
-    {NULL, NULL}
+    {NULL}
 };
 
 int write_tags_header( unsigned char *dst, PyObject *dict, TagType tags[], int *moved );
@@ -113,7 +113,7 @@ void swap_endianness_in_memory( unsigned char *buffer, int bytes )
 void dump_buffer( unsigned char *buffer, int count )
 {
     char string[16];
-    int i, j;
+    int i;
 
     for( i = 0; i < count; i++)
     {

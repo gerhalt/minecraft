@@ -20,7 +20,7 @@ Header for tag-related functionality
 #define TAG_COMPOUND    10
 #define TAG_INT_ARRAY   11
 
-TagType leveldat_tags[];
-TagType chunk_tags[];
+extern TagType leveldat_tags[];
+extern TagType chunk_tags[];
 
 #endif

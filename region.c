@@ -23,16 +23,14 @@ void print_region_info( Region *region )
 int update_region( Region *region, Chunk *chunk )
 {
     int i, location, offset, timestamp, last_offset, uncompressed_size, compressed_size, difference, new_sector_count;
-    unsigned char sector_count, last_sector_count, *end, *uncompressed_chunk, *compressed_chunk, *chunk_location;
-
-    chunk_location = NULL;
+    unsigned char sector_count, last_sector_count, *uncompressed_chunk, *compressed_chunk;
 
     offset = 4 *((chunk->x & 31) + (chunk->z & 31) *32);
     location = swap_endianness(region->buffer + offset, 3);
     sector_count = *(region->buffer + offset + 3);
-    timestamp = swap_endianness(region->buffer + offset + 4096, 4);
 
     // TODO: Update timestamp, if desired
+    // timestamp = swap_endianness(region->buffer + offset + 4096, 4);
 
     // Find the last offset in the file, both so we can know the end if we
     // need to move memory to insert extra chunk sectors, and so we can append

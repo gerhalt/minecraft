@@ -12,22 +12,22 @@ Provides functionality for Chunk objects
 
 // Takes a region file stream and a chunk location and finds and decompresses
 // the chunk to the passed buffer
-int decompress_chunk( unsigned char * region, unsigned char * decompressed, int x, int z )
+int decompress_chunk( unsigned char *region, unsigned char *decompressed, int x, int z )
 {
     unsigned int header_offset, chunk_offset, chunk_length, compression_type;
     int rc;
 
     printf("Finding chunk (%d, %d)\n", x, z);
-    header_offset = 4 * ((x & 31) + (z & 31) * 32);
+    header_offset = 4 *((x & 31) + (z & 31) *32);
 
-    chunk_offset = swap_endianness(region + header_offset, 3) * 4096;
+    chunk_offset = swap_endianness(region + header_offset, 3) *4096;
     if ( chunk_offset == 0 )
     {
         printf("Chunk is empty, crap!\n");
         return 1;
     }
 
-    printf("Offset: %d | Length: %d\n", chunk_offset, *(region + header_offset + 3) * 4096);
+    printf("Offset: %d | Length: %d\n", chunk_offset, *(region + header_offset + 3) *4096);
 
     // Read the chunk length from the start of the chunk
     chunk_length = swap_endianness(region + chunk_offset, 4);
@@ -35,6 +35,12 @@ int decompress_chunk( unsigned char * region, unsigned char * decompressed, int 
     printf("True Length: %d | Compression: %d\n", chunk_length, compression_type);
 
     rc = inf(decompressed, region + chunk_offset + 5, chunk_length - 1, 0);
+
+    if( rc < 0 )
+    {
+        PyErr_Format(PyExc_Exception, "Couldn't decompress!");
+        return -1;
+    }
 
     return 0;
 }
@@ -53,9 +59,9 @@ void Chunk_dealloc( Chunk *self )
 
 int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
 {
-    Region * region;
-    PyObject * old, * dict, * world;
-    unsigned char * buffer; // TODO: Dynamically allocate
+    Region *region;
+    PyObject *old, *dict, *world;
+    unsigned char *buffer; // TODO: Dynamically allocate
     int moved, rc;
 
     if( !PyArg_ParseTuple(args, "Oii", &world, &self->x, &self->z) )
@@ -63,12 +69,13 @@ int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
 
     buffer = calloc(1000000, 1);
 
-    region = load_region(world, self->x >> 5, self->z >> 5);
+    region = load_region((World *) world, self->x >> 5, self->z >> 5);
     rc = decompress_chunk(region->buffer, buffer, self->x, self->z);
 
     if( rc != 0 )
     {
         PyErr_Format(PyExc_Exception, "CHUNK EMPTY!");
+        dump_buffer(buffer, 480);
         return -1;
     }
 
@@ -94,28 +101,24 @@ int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds )
     return 0;
 }
 
-static PyObject * Chunk_save( Chunk *self )
+static PyObject *Chunk_save( Chunk *self )
 {
-    Region * region;
-    unsigned char * buffer; // TODO: Remove, definitely should be a dynamic call
-    int size, rc;
+    Region *region;
 
     // Load the region, making sure we convert from chunk to region coordinates
-    region = load_region(self->world, self->x >> 5, self->z >> 5);
+    region = load_region((World *) self->world, self->x >> 5, self->z >> 5);
     update_region(region, self);
-
-    free(buffer);
 
     Py_INCREF(Py_None);
     return Py_None;
 }
 
-char get_nibble( char * byte_array, int index )
+char get_nibble( char *byte_array, int index )
 {
     return index % 2 == 0 ? byte_array[index / 2] & 0x0F : byte_array[index / 2]>>4 & 0x0F;
 }
 
-void set_nibble( char * byte_array, int index, char value )
+void set_nibble( char *byte_array, int index, unsigned char value )
 {
     char existing;
 
@@ -127,9 +130,9 @@ void set_nibble( char * byte_array, int index, char value )
 
 // Currently, it is expected that passed arguments will be in coordinates
 // relative to the chunk
-PyObject * Chunk_get_block( Chunk *self, PyObject *args )
+PyObject *Chunk_get_block( Chunk *self, PyObject *args )
 {
-    PyObject * block_args, * block, * level, * sections, * section;
+    PyObject *block_args, *block, *level, *sections, *section;
     int i, size, x, y, z;
 
     if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
@@ -146,7 +149,7 @@ PyObject * Chunk_get_block( Chunk *self, PyObject *args )
     section = NULL;
     for( i = 0; i < size; i++ )
     {
-        PyObject * current_section;
+        PyObject *current_section;
         int sub_y;
 
         current_section = PyList_GetItem(sections, i);
@@ -163,44 +166,46 @@ PyObject * Chunk_get_block( Chunk *self, PyObject *args )
     else
     {
         int section_y, position;
-        unsigned short * id;
-        unsigned char * byte_array, data, blocklight, skylight;
+        unsigned short id;
+        unsigned char data, blocklight, skylight;
+        char *byte_array;
 
         data = blocklight = skylight = 0;
         section_y = y % 16;
-        position = section_y * 16 * 16 + z * 16 + x;
+        position = section_y *16 *16 + z *16 + x;
 
         // We know it will contain the "Blocks" byte array
-        byte_array = PyDict_GetItemString(section, "Blocks");
-        id = byte_array[position];
+        byte_array = (char *) PyDict_GetItemString(section, "Blocks");
+        id = (short) byte_array[position];
 
         if( PyDict_Contains(section, PyString_FromString("Add")) )
         {
-            byte_array = PyDict_GetItemString(section, "Add");
+            byte_array = (char *) PyDict_GetItemString(section, "Add");
             id += get_nibble(byte_array, position) << 8;
         }
 
         if( PyDict_Contains(section, PyString_FromString("Data")) )
         {
-            byte_array = PyDict_GetItemString(section, "Data");
+            byte_array = (char *) PyDict_GetItemString(section, "Data");
             data = get_nibble(byte_array, position);
         }
         
         if( PyDict_Contains(section, PyString_FromString("BlockLight")) )
         {
-            byte_array = PyDict_GetItemString(section, "BlockLight");
+            byte_array = (char *) PyDict_GetItemString(section, "BlockLight");
             blocklight = get_nibble(byte_array, position);
         }
         
         if( PyDict_Contains(section, PyString_FromString("SkyLight")) )
         {
-            byte_array = PyDict_GetItemString(section, "SkyLight");
+            byte_array = (char *) PyDict_GetItemString(section, "SkyLight");
             skylight = get_nibble(byte_array, position);
         }
 
         block_args = Py_BuildValue("HBBB", id, data, blocklight, skylight);
     }
 
+    // TODO: Populate with actual block values
     block_args = Py_BuildValue("HBBB", 0, 0, 0, 0);
     block = PyObject_CallObject((PyObject *) &minecraft_BlockType, block_args);
     Py_INCREF(block);
@@ -209,12 +214,12 @@ PyObject * Chunk_get_block( Chunk *self, PyObject *args )
 
 // Currently, it is expected that passed arguments will be in coordinates
 // relative to the chunk
-PyObject * Chunk_put_block( Chunk *self, PyObject *args )
+PyObject *Chunk_put_block( Chunk *self, PyObject *args )
 {
-    PyObject * level, * sections, * section;
-    Block * block;
+    PyObject *level, *sections, *section;
+    Block *block;
     int i, size, position, x, y, z;
-    char * byte_array;
+    char *byte_array;
 
     if( !PyArg_ParseTuple(args, "iiiO", &x, &y, &z, &block) )
     {
@@ -230,7 +235,7 @@ PyObject * Chunk_put_block( Chunk *self, PyObject *args )
     section = NULL;
     for( i = 0; i < size; i++ )
     {
-        PyObject * current_section;
+        PyObject *current_section;
         int sub_y;
 
         current_section = PyList_GetItem(sections, i);
@@ -245,11 +250,10 @@ PyObject * Chunk_put_block( Chunk *self, PyObject *args )
     // If a section doesn't exist where this block should go, create it
     if( section == NULL )
     {
-        PyObject * new;
-        unsigned char * byte_array;
+        PyObject *new;
 
         new = PyInt_FromLong(y / 16); // This should end up not needing to be INCREF'd I think
-        printf("Creating new section! %d\n", new);
+        printf("Creating new section!\n");
 
         section = PyDict_New();
         Py_INCREF(section);
@@ -282,16 +286,16 @@ PyObject * Chunk_put_block( Chunk *self, PyObject *args )
         PyList_Append(sections, section);
     }
 
-    position = (y % 16) * 16 * 16 + z * 16 + x;
+    position = (y % 16) *16 *16 + z *16 + x;
     byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "Blocks"));
-    byte_array[position] = (char) block->id;
+    byte_array[position] = block->id;
 
     // set "Add", only if the block ID is greater than 0x0F
     if( block->id >> 8 != 0 )
     {
         if( PyDict_Contains(section, PyString_FromString("Add")) == 0 )
         {
-            PyObject * new;
+            PyObject *new;
 
             byte_array = calloc(2048, 1);
             new = PyByteArray_FromStringAndSize(byte_array, 2048);
@@ -318,7 +322,7 @@ PyObject * Chunk_put_block( Chunk *self, PyObject *args )
 
 // TODO: Placeholder
 // Recalculate lighting and anything else that requires calculation
-static PyObject * Chunk_calculate( Chunk *self )
+static PyObject *Chunk_calculate( Chunk *self )
 {
     Py_INCREF(Py_None);
     return Py_None;

@@ -4,10 +4,21 @@ minecraft.h
 Extension module header file
 */
 
-static int SMALL_DEFLATE_MAX = 10000;
-static int SMALL_INFLATE_MAX = 20000;
-static int CHUNK_DEFLATE_MAX = 65536;
-static int CHUNK_INFLATE_MAX = 131072;
+#ifndef PARAMETERS
+#define PARAMETERS
+
+// Buffer sizes
+#define SMALL_DEFLATE_MAX   10000;
+#define SMALL_INFLATE_MAX   20000;
+#define CHUNK_DEFLATE_MAX   65536;
+#define CHUNK_INFLATE_MAX   131072;
+
+#define MAX_CHUNKS              100
+#define MAX_REGIONS             8
+#define NEW_REGION_BUFFER_SIZE  2000000
+#define REGION_BUFFER_PADDING   10000
+
+#endif
 
 // structs
 typedef struct TagType{
@@ -66,6 +77,9 @@ PyObject *get_tag( unsigned char *tag, char tag_id, int *moved );
 int write_tags( unsigned char *dst, PyObject *dict, TagType tags[] );
 
 // region.c
+int update_region( Region *region, Chunk *chunk );
+int save_region( Region *region, char *path );
+int unload_region( Region *region, char *path );
 void print_region_info( Region *region );
 
 // world.c

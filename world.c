@@ -10,11 +10,6 @@ World object definition and functionality
 #include "minecraft.h"
 #include "tags.h"
 
-#define MAX_CHUNKS              100
-#define MAX_REGIONS             8
-#define NEW_REGION_BUFFER_SIZE  2000000
-#define REGION_BUFFER_PADDING   10000
-
 /*
 Ensures that a region is in memory, or copies the file into memory if it isn't.
 If the region doesn't exist in file form, simply creates a new region in
@@ -195,7 +190,7 @@ static PyObject *World_get_block( World *self, PyObject *args, PyObject *kwds )
     chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
 
     block_args = Py_BuildValue("iii", x % 16, y, z % 16); 
-    block = Chunk_get_block(chunk, block_args);
+    block = Chunk_get_block((Chunk *) chunk, block_args);
     Py_INCREF(block);
     return block;
 }
@@ -219,7 +214,7 @@ PyObject *World_put_block( World *self, PyObject *args )
     chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
 
     block_args = Py_BuildValue("iiiO", x % 16, y, z % 16, (PyObject *) block); 
-    Chunk_put_block(chunk, block_args);
+    Chunk_put_block((Chunk *) chunk, block_args);
 
     Py_INCREF(Py_None);
     return Py_None;
