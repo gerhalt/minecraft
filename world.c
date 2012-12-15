@@ -23,10 +23,10 @@ memory, which can then be saved out.
 Currently wrapped by World_load_region(...), though this function may end up
 being deprecated.
 */
-Region * load_region( World *self, int x, int z )
+Region *load_region( World *self, int x, int z )
 {
-    FILE * fp;
-    Region * region;
+    FILE *fp;
+    Region *region;
     char filename[1000]; // TODO: Dynamic
     int count;
 
@@ -114,9 +114,9 @@ void World_dealloc( World *self )
 
 static int World_init( World *self, PyObject *args, PyObject *kwds )
 {
-    FILE * fp;
-    char * tmp, filename[1000];
-    unsigned char * src, * dst;
+    FILE *fp;
+    char *tmp, filename[1000];
+    unsigned char *src, *dst;
 
     if( !PyArg_ParseTuple(args, "s", &tmp) )
        return -1;
@@ -125,7 +125,7 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
     fp = fopen(filename, "rb");
     if( fp != NULL )
     {
-        PyObject * level, * old_level;
+        PyObject *level, *old_level;
         int size, moved, rc;
         struct stat stbuf;
 
@@ -176,9 +176,9 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
 /*
 Get a block in the world
 */
-static PyObject * World_get_block( World *self, PyObject *args, PyObject *kwds )
+static PyObject *World_get_block( World *self, PyObject *args, PyObject *kwds )
 {
-    PyObject * chunk, * chunk_args, * block, * block_args;
+    PyObject *chunk, *chunk_args, *block, *block_args;
     int x, y, z;
 
     if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
@@ -200,9 +200,9 @@ static PyObject * World_get_block( World *self, PyObject *args, PyObject *kwds )
     return block;
 }
 
-PyObject * World_put_block( World *self, PyObject *args )
+PyObject *World_put_block( World *self, PyObject *args )
 {
-    PyObject * chunk, * chunk_args, * block, * block_args;
+    PyObject *chunk, *chunk_args, *block, *block_args;
     int x, y, z;
 
     if( !PyArg_ParseTuple(args, "iiiO", &x, &y, &z, &block) )
@@ -226,7 +226,7 @@ PyObject * World_put_block( World *self, PyObject *args )
 }
 
 // TODO: Re-evalute, moving this to a wrapper
-static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds )
+static PyObject *World_load_region( World *self, PyObject *args, PyObject *kwds )
 {
     int region_x, region_z;
 
@@ -244,9 +244,9 @@ static PyObject * World_load_region( World *self, PyObject *args, PyObject *kwds
     return Py_None;
 }
 
-static PyObject * World_save_region( World *self, PyObject *args, PyObject *kwds )
+static PyObject *World_save_region( World *self, PyObject *args, PyObject *kwds )
 {
-    Region * region;
+    Region *region;
     int region_x, region_z;
 
     if( !PyArg_ParseTuple(args, "ii", &region_x, &region_z) )
@@ -274,9 +274,9 @@ static PyObject * World_save_region( World *self, PyObject *args, PyObject *kwds
     return Py_None;
 }
 
-static PyObject * World_load_chunk( World *self, PyObject *args )
+static PyObject *World_load_chunk( World *self, PyObject *args )
 {
-    PyObject * chunk, * chunk_args;
+    PyObject *chunk, *chunk_args;
     int x, z;
 
     if( !PyArg_ParseTuple(args, "ii", &x, &z) )
@@ -295,11 +295,11 @@ static PyObject * World_load_chunk( World *self, PyObject *args )
 }
 
 // Right now, just save out level.dat
-static PyObject * World_save( World *self )
+static PyObject *World_save( World *self )
 {
-    FILE * fp;
+    FILE *fp;
     char filename[1000];
-    unsigned char * compressed, * uncompressed;
+    unsigned char *compressed, *uncompressed;
     int size, deflated_size;
 
     uncompressed = calloc(10000, 1);

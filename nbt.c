@@ -72,11 +72,11 @@ TagType chunk_tags[] = {
     {NULL, NULL}
 };
 
-int write_tags_header( unsigned char * dst, PyObject * dict, TagType tags[], int * moved );
+int write_tags_header( unsigned char *dst, PyObject *dict, TagType tags[], int *moved );
 
 // Takes a number of bytes (in big-endian order), starting at a given location,
 // and returns the integer they represent
-long swap_endianness( unsigned char * buffer, int bytes )
+long swap_endianness( unsigned char *buffer, int bytes )
 {
     long transform;
     int i;
@@ -84,14 +84,14 @@ long swap_endianness( unsigned char * buffer, int bytes )
     transform = 0;
     for( i = 0; i < bytes; i++ )
     {
-        transform = buffer[i]<<((bytes - i - 1) * 8) | transform;
+        transform = buffer[i]<<((bytes - i - 1) *8) | transform;
     }
     return transform;
 }
 
-void swap_endianness_in_memory( unsigned char * buffer, int bytes )
+void swap_endianness_in_memory( unsigned char *buffer, int bytes )
 {
-    unsigned char * end;
+    unsigned char *end;
 
     end = buffer + bytes - 1;
     while( buffer < end )
@@ -110,7 +110,7 @@ void swap_endianness_in_memory( unsigned char * buffer, int bytes )
 }
 
 // Takes a buffer and prints it prettily
-void dump_buffer( unsigned char * buffer, int count )
+void dump_buffer( unsigned char *buffer, int count )
 {
     char string[16];
     int i, j;
@@ -136,14 +136,14 @@ void dump_buffer( unsigned char * buffer, int count )
 
 /*
 Inflate
-  * dst - destination
-  * src - source
+  *dst - destination
+  *src - source
   bytes - number of bytes in the inflation buffer
   mode  - compression mode to read
     0   - normal (zlib)
     1   - gzip (including headers)
 */
-int inf( unsigned char * dst, unsigned char * src, int bytes, int mode )
+int inf( unsigned char *dst, unsigned char *src, int bytes, int mode )
 {
     int ret;
     z_stream strm;
@@ -157,7 +157,7 @@ int inf( unsigned char * dst, unsigned char * src, int bytes, int mode )
     strm.next_in = src;
     strm.avail_in = bytes;
 
-    inflateInit2(&strm, MAX_WBITS + mode * 32); // + 32 bits for header detection and gzip
+    inflateInit2(&strm, MAX_WBITS + mode *32); // + 32 bits for header detection and gzip
     ret = inflate(&strm, Z_FINISH);
     inflateEnd(&strm);
 
@@ -169,14 +169,14 @@ int inf( unsigned char * dst, unsigned char * src, int bytes, int mode )
 
 /*
 Deflate
-  * dst - destination
-  * src - source
+  *dst - destination
+  *src - source
   bytes - number of bytes in the deflate buffer
   mode  - compression mode to use
     0   - normal (zlib)
     1   - gzip (including headers)
 */
-int def( unsigned char * dst, unsigned char * src, int bytes, int mode, int * size )
+int def( unsigned char *dst, unsigned char *src, int bytes, int mode, int *size )
 {
     int ret;
     z_stream strm;
@@ -193,7 +193,7 @@ int def( unsigned char * dst, unsigned char * src, int bytes, int mode, int * si
     deflateInit2(&strm, 
                  Z_DEFAULT_COMPRESSION,
                  Z_DEFLATED, 
-                 MAX_WBITS + mode * 16,  // + 16 bits for simple gzip header
+                 MAX_WBITS + mode *16,  // + 16 bits for simple gzip header
                  8,
                  Z_DEFAULT_STRATEGY);
     ret = deflate(&strm, Z_FINISH);
@@ -208,9 +208,9 @@ int def( unsigned char * dst, unsigned char * src, int bytes, int mode, int * si
 
 // Given a pointer to a payload, return a PyObject representing that payload
 // moved will be modified by the amount the tag pointer shifted
-PyObject * get_tag( unsigned char * tag, char id, int * moved )
+PyObject *get_tag( unsigned char *tag, char id, int *moved )
 {
-    PyObject * payload;
+    PyObject *payload;
 
     // The only time the id should be -1 is if the root is passed in
     if( id == -1 )
@@ -271,13 +271,13 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
             payload = PyList_New(size);
             for( i = 0; i < size; i++ )
             {
-                PyObject * integer;
+                PyObject *integer;
 
                 integer = PyInt_FromLong(swap_endianness(tag, sizeof(int)));
                 PyList_SET_ITEM(payload, i, integer);
                 tag += sizeof(int);
             }
-            *moved += sizeof(int) * (size + 1);
+            *moved += sizeof(int) *(size + 1);
             break;
 
         case TAG_STRING: // String
@@ -305,7 +305,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
             payload = PyList_New(size);
             for( i = 0; i < size; i++ )
             {
-                PyObject * list_item;
+                PyObject *list_item;
 
                 sub_moved = 0;
                 list_item = get_tag(tag, list_id, &sub_moved);
@@ -319,9 +319,9 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
             payload = PyDict_New();
             do // Repeatedly grab tags until an end tag is seen 
             {
-                PyObject * sub_payload;
+                PyObject *sub_payload;
                 unsigned char sub_id;
-                char * sub_tag_name;
+                char *sub_tag_name;
                 int sub_tag_name_length;
 
                 sub_id = *tag;
@@ -365,12 +365,12 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
 
 /*
 write_tags
-  * dst - destination buffer
-  * dict - Python dictionary to convert
+  *dst - destination buffer
+  *dict - Python dictionary to convert
 returns
   total size of written tags, including root tag
 */
-int write_tags( unsigned char * dst, PyObject * dict, TagType tags[] )
+int write_tags( unsigned char *dst, PyObject *dict, TagType tags[] )
 {
     int moved;
 
@@ -391,15 +391,15 @@ int write_tags( unsigned char * dst, PyObject * dict, TagType tags[] )
 }
 
 
-int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payload, TagType tags[], int * moved )
+int write_tags_payload( unsigned char *dst, TagType tag_info, PyObject *payload, TagType tags[], int *moved )
 {
     // printf("Name: %s | ID: %d\n", tag_info.name, tag_info.id);
     switch(tag_info.id)
     {
-        PyObject * list_item_tmp;
+        PyObject *list_item_tmp;
         long long_tmp;
         double double_tmp;
-        char * byte_array_tmp;
+        char *byte_array_tmp;
         int i, size, sub_moved;
 
         case TAG_BYTE:
@@ -468,7 +468,7 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
                 dst += sizeof(int);
             }
 
-            *moved += sizeof(int) * (size + 1);
+            *moved += sizeof(int) *(size + 1);
             break;
 
         case TAG_STRING:
@@ -546,9 +546,9 @@ int write_tags_payload( unsigned char * dst, TagType tag_info, PyObject * payloa
 }
 
 // TODO: Buffer size might be an issue
-int write_tags_header( unsigned char * dst, PyObject * dict, TagType tags[], int * moved )
+int write_tags_header( unsigned char *dst, PyObject *dict, TagType tags[], int *moved )
 {
-    PyObject * keys;
+    PyObject *keys;
     int i, size;
 
     keys = PyDict_Keys(dict);
@@ -557,8 +557,8 @@ int write_tags_header( unsigned char * dst, PyObject * dict, TagType tags[], int
     size = PyDict_Size(dict);
     for( i = 0; i < size; i++ )
     {
-        PyObject * key, * value;
-        char * keystr;
+        PyObject *key, *value;
+        char *keystr;
         int j, len, sub_moved;
         struct TagType tag_info;
 

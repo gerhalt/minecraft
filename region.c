@@ -12,7 +12,7 @@ Functions to writing to region files, mostly to be used by chunks when saving
 #include "minecraft.h"
 #include "tags.h"
 
-void print_region_info( Region * region )
+void print_region_info( Region *region )
 {
     printf("Region | X: %d Z: %d\nCurrent Size: %d | Buffer Size: %d\nBuffer: %p\nNext: %p\n", region->x, region->z, region->current_size, region->buffer_size, region->buffer, region->next);
 }
@@ -20,14 +20,14 @@ void print_region_info( Region * region )
 // Takes a region buffer, and updates it with a chunk, with the assumptions
 // that a) the chunk belongs in the region buffer and b) the region buffer
 // is large enough to handle a previusly-empty chunk being written to the end
-int update_region( Region * region, Chunk * chunk )
+int update_region( Region *region, Chunk *chunk )
 {
     int i, location, offset, timestamp, last_offset, uncompressed_size, compressed_size, difference, new_sector_count;
-    unsigned char sector_count, last_sector_count, * end, * uncompressed_chunk, * compressed_chunk, * chunk_location;
+    unsigned char sector_count, last_sector_count, *end, *uncompressed_chunk, *compressed_chunk, *chunk_location;
 
     chunk_location = NULL;
 
-    offset = 4 * ((chunk->x & 31) + (chunk->z & 31) * 32);
+    offset = 4 *((chunk->x & 31) + (chunk->z & 31) *32);
     location = swap_endianness(region->buffer + offset, 3);
     sector_count = *(region->buffer + offset + 3);
     timestamp = swap_endianness(region->buffer + offset + 4096, 4);
@@ -76,13 +76,13 @@ int update_region( Region * region, Chunk * chunk )
     if( difference != 0 )
     {
         // Create space, if needed
-        if( region->current_size + difference * 4096 >= region->buffer_size )
+        if( region->current_size + difference *4096 >= region->buffer_size )
         {
-            unsigned char * new_region_buffer;
+            unsigned char *new_region_buffer;
 
             printf("Buffer is too small, increasing size!\n");
             // Allocate a new region, with a few extra sectors worth of padding
-            new_region_buffer = malloc(region->current_size + (difference + 4) * 4096);
+            new_region_buffer = malloc(region->current_size + (difference + 4) *4096);
 
             // TODO: Optimize, since if the chunk information is being
             // inserted, chunks after it will be moved in memory again
@@ -95,12 +95,12 @@ int update_region( Region * region, Chunk * chunk )
         // Shift chunks after this chunk after if needed
         if( location != 0 )
         {
-            void * next_chunk, * next_chunk_after;
+            void *next_chunk, *next_chunk_after;
             int num;
 
-            num = (last_offset + last_sector_count - (location + sector_count)) * 4096;
-            next_chunk = region->buffer + (location + sector_count) * 4096;
-            next_chunk_after = region->buffer + (location + sector_count + difference) * 4096;
+            num = (last_offset + last_sector_count - (location + sector_count)) *4096;
+            next_chunk = region->buffer + (location + sector_count) *4096;
+            next_chunk_after = region->buffer + (location + sector_count + difference) *4096;
             printf("Shifting %d bytes worth of chunk data from %p to %p\n", num, next_chunk, next_chunk_after);
 
             memmove(next_chunk_after, next_chunk, num);
@@ -127,10 +127,10 @@ int update_region( Region * region, Chunk * chunk )
         location = last_offset + last_sector_count;    
     }
 
-    * (int *) (region->buffer + location * 4096) = compressed_size + 1;
-    swap_endianness_in_memory(region->buffer + location * 4096, 4);
-    * (unsigned char *) (region->buffer + location * 4096 + 4) = 2; // Compression type
-    memcpy(region->buffer + location * 4096 + 5, compressed_chunk, compressed_size);
+    *(int *) (region->buffer + location *4096) = compressed_size + 1;
+    swap_endianness_in_memory(region->buffer + location *4096, 4);
+    *(unsigned char *) (region->buffer + location *4096 + 4) = 2; // Compression type
+    memcpy(region->buffer + location *4096 + 5, compressed_chunk, compressed_size);
 
     free(compressed_chunk);
     free(uncompressed_chunk);
@@ -145,7 +145,7 @@ Save the region to file
 */
 int save_region( Region *region, char *path )
 {
-    FILE * fp;
+    FILE *fp;
     char filename[1000]; // TODO: Dynamic
 
     sprintf(filename, "%s/region/r.%d.%d.mca", path, region->x, region->z);
@@ -169,7 +169,7 @@ Save the region to file, and de-allocate as necessary
   *region - region information to save, and resource to de-allocate
   path    - path to directory that should contain region file
 */
-int unload_region( Region *region, char * path )
+int unload_region( Region *region, char *path )
 {
     int rc;
 
