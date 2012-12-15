@@ -178,7 +178,7 @@ Get a block in the world
 */
 static PyObject * World_get_block( World *self, PyObject *args, PyObject *kwds )
 {
-    PyObject * chunk, * chunk_args;
+    PyObject * chunk, * chunk_args, * block, * block_args;
     int x, y, z;
 
     if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
@@ -189,28 +189,40 @@ static PyObject * World_get_block( World *self, PyObject *args, PyObject *kwds )
         return Py_None;
     }
 
-    // TODO: Parse arguments, int x, y, z and a block?
-    // TODO: I am treating x and z as chunk coordinates, when they are block
-    //       coordinates.  This needs to be fixed
+    y = y % 256;
 
     chunk_args = Py_BuildValue("Oii", (PyObject *) self, x, z);
     chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
-/*
-    Block * block;
-    block = Chunk_get_block(CHUNK..., x, y, z);
-    return block
-    */
-    
-    //Py_INCREF(chunk); // TODO: Yes?
 
-//    Py_INCREF(chunk);
-    return chunk;
+    block_args = Py_BuildValue("iii", x % 16, y, z % 16); 
+    block = Chunk_get_block(chunk, block_args);
+    Py_INCREF(block);
+    return block;
 }
 
-static PyObject * World_put_block( World *self )
+PyObject * World_put_block( World *self, PyObject *args )
 {
-    // TODO: This will load a chunk too
-    return NULL;
+    PyObject * chunk, * chunk_args, * block, * block_args;
+    int x, y, z;
+
+    if( !PyArg_ParseTuple(args, "iiiO", &x, &y, &z, &block) )
+    {
+        PyErr_Format(PyExc_Exception, "Cannot parse parameters");
+
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    y = y % 256;
+
+    chunk_args = Py_BuildValue("Oii", (PyObject *) self, x, z);
+    chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
+
+    block_args = Py_BuildValue("iiiO", x % 16, y, z % 16, (PyObject *) block); 
+    Chunk_put_block(chunk, block_args);
+
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 // TODO: Re-evalute, moving this to a wrapper
@@ -324,7 +336,7 @@ static PyMethodDef World_methods[] = {
     {"save", (PyCFunction) World_save, METH_NOARGS, "Save the world! (out to file, anyway)"},
     {"load_chunk", (PyCFunction) World_load_chunk, METH_VARARGS, "Load a chunk."},
     {"get_block", (PyCFunction) World_get_block, METH_VARARGS, "Get the block at a given location."},
-    {"put_block", (PyCFunction) World_put_block, METH_NOARGS, "Put a block at a given spot."},
+    {"put_block", (PyCFunction) World_put_block, METH_VARARGS, "Put a block at a given spot."},
     {"load_region", (PyCFunction) World_load_region, METH_VARARGS, "Load a region."},
     {"save_region", (PyCFunction) World_save_region, METH_VARARGS, "Save a region, assuming it has been modified and is in memory"},
     {NULL}

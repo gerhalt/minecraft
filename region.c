@@ -27,7 +27,6 @@ int update_region( Region * region, Chunk * chunk )
 
     chunk_location = NULL;
 
-
     offset = 4 * ((chunk->x & 31) + (chunk->z & 31) * 32);
     location = swap_endianness(region->buffer + offset, 3);
     sector_count = *(region->buffer + offset + 3);
@@ -125,7 +124,6 @@ int update_region( Region * region, Chunk * chunk )
     if( location == 0 && sector_count == 0 )
     {
         printf("Chunk was previously empty, appending to end of buffer");
-
         location = last_offset + last_sector_count;    
     }
 

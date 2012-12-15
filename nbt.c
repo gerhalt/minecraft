@@ -217,6 +217,7 @@ PyObject * get_tag( unsigned char * tag, char id, int * moved )
     {
         id = tag[0];
         tag += 3; // Skip the length of the tag, since we know it to be 0
+        *moved += 3; 
     }
 
     switch(id)

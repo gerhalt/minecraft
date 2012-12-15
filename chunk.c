@@ -127,7 +127,7 @@ void set_nibble( char * byte_array, int index, char value )
 
 // Currently, it is expected that passed arguments will be in coordinates
 // relative to the chunk
-static PyObject * Chunk_get_block( Chunk *self, PyObject *args )
+PyObject * Chunk_get_block( Chunk *self, PyObject *args )
 {
     PyObject * block_args, * block, * level, * sections, * section;
     int i, size, x, y, z;
@@ -209,7 +209,7 @@ static PyObject * Chunk_get_block( Chunk *self, PyObject *args )
 
 // Currently, it is expected that passed arguments will be in coordinates
 // relative to the chunk
-static PyObject * Chunk_put_block( Chunk *self, PyObject *args )
+PyObject * Chunk_put_block( Chunk *self, PyObject *args )
 {
     PyObject * level, * sections, * section;
     Block * block;
