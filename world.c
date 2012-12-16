@@ -97,12 +97,51 @@ Region *load_region( World *self, int x, int z )
 }
 
 /*
+Helper functionality which looks for a chunk in the simple hash table a World
+contains.  If the location that chunk would be at is empty, or occupied by a 
+different Chunk with the same signature, the new chunk is pulled in (and the 
+old chunk is saved, if needed).
+*/
+PyObject * get_chunk( World *world, int x, int z )
+{
+    PyObject *chunk;
+    int hash;
+
+    hash = (x << 16 + z) % MAX_CHUNKS;
+    printf("Chunk hash: %d\n", hash);
+
+    chunk = world->chunks[hash];
+    if( chunk == NULL || (((Chunk *) chunk)->x != x || ((Chunk *) chunk)->z != z) )
+    {
+        PyObject *chunk_args;
+
+        printf("Chunk not found, or wrong chunk, loading\n");
+
+        Py_XDECREF(chunk);
+        chunk_args = Py_BuildValue("Oii", (PyObject *) world, x, z);
+        chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
+
+        Py_INCREF(chunk); // Table entry reference
+        world->chunks[hash] = chunk;
+    }
+
+    Py_INCREF(chunk); 
+    return chunk;
+}
+
+/*
 
 Python object-related code
 
 */
 void World_dealloc( World *self )
 {
+    int i;
+
+    for( i = 0; i < MAX_CHUNKS; i++ )
+        Py_XDECREF(self->chunks[i]);
+    free(self->chunks);
+
     Py_XDECREF(self->level);
     self->ob_type->tp_free((PyObject *) self);
 }
@@ -161,9 +200,8 @@ static int World_init( World *self, PyObject *args, PyObject *kwds )
     self->path = tmp;
     self->regions = NULL;
 
-    // TODO: May get wrapper or moved, this is perhaps not the best way to 
-    // store this information, but it should work for now
-    self->chunk_count = 0;
+    // Set up table to store chunks that are in memory
+    self->chunks = calloc(sizeof(PyObject *), MAX_CHUNKS);
 
     return 0;
 }
@@ -173,8 +211,8 @@ Get a block in the world
 */
 static PyObject *World_get_block( World *self, PyObject *args, PyObject *kwds )
 {
-    PyObject *chunk, *chunk_args, *block, *block_args;
-    int x, y, z;
+    PyObject *chunk, *block, *block_args;
+    int i, x, y, z;
 
     if( !PyArg_ParseTuple(args, "iii", &x, &y, &z) )
     {
@@ -186,8 +224,7 @@ static PyObject *World_get_block( World *self, PyObject *args, PyObject *kwds )
 
     y = y % 256;
 
-    chunk_args = Py_BuildValue("Oii", (PyObject *) self, x, z);
-    chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
+    chunk = get_chunk(self, x >> 4, z >> 4);
 
     block_args = Py_BuildValue("iii", x % 16, y, z % 16); 
     block = Chunk_get_block((Chunk *) chunk, block_args);
@@ -197,7 +234,7 @@ static PyObject *World_get_block( World *self, PyObject *args, PyObject *kwds )
 
 PyObject *World_put_block( World *self, PyObject *args )
 {
-    PyObject *chunk, *chunk_args, *block, *block_args;
+    PyObject *chunk, *block, *block_args;
     int x, y, z;
 
     if( !PyArg_ParseTuple(args, "iiiO", &x, &y, &z, &block) )
@@ -210,8 +247,7 @@ PyObject *World_put_block( World *self, PyObject *args )
 
     y = y % 256;
 
-    chunk_args = Py_BuildValue("Oii", (PyObject *) self, x, z);
-    chunk = PyObject_CallObject((PyObject *) &minecraft_ChunkType, chunk_args);
+    chunk = get_chunk(self, x >> 4, z >> 4);
 
     block_args = Py_BuildValue("iiiO", x % 16, y, z % 16, (PyObject *) block); 
     Chunk_put_block((Chunk *) chunk, block_args);
@@ -263,7 +299,25 @@ static PyObject *World_save_region( World *self, PyObject *args, PyObject *kwds 
     if( region == NULL)
         printf("Region (%d, %d) not loaded!\n", region_x, region_z);
     else
+    {
+        int i;
+
+        // Save any chunks in memory
+        for( i = 0; i < MAX_CHUNKS; i++ )
+        {
+            Chunk *chunk;
+            chunk = (Chunk *) self->chunks[i];
+            if( chunk == NULL )
+                continue;
+            else if( chunk->x >> 5 == region_x && chunk->z >> 5 == region_z )
+            {
+                printf("Chunk %d,%d saved during region save\n", chunk->x, chunk->z);
+                update_region(region, chunk);
+            }
+        }
+
         save_region(region, self->path); 
+    }
 
     Py_INCREF(Py_None);
     return Py_None;

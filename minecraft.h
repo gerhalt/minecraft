@@ -13,7 +13,7 @@ Extension module header file
 #define CHUNK_DEFLATE_MAX   65536;
 #define CHUNK_INFLATE_MAX   131072;
 
-#define MAX_CHUNKS              100
+#define MAX_CHUNKS              101
 #define MAX_REGIONS             8
 #define NEW_REGION_BUFFER_SIZE  2000000
 #define REGION_BUFFER_PADDING   10000
@@ -53,8 +53,7 @@ typedef struct {
     Region *regions;
 
     // Chunk holding code, probably will be moved
-    PyObject *chunks[100];
-    int chunk_count;
+    PyObject **chunks;
 } World;
 
 // block.c
