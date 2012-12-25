@@ -36,28 +36,29 @@ Generator * setup( int seed )
 
     g = malloc(sizeof(Generator));
 
-    g->perm = calloc(sizeof(int), 256);
-    for( i = 255; i >= 0; i-- )
+    g->perm = calloc(sizeof(int), PERMUTATIONS * 2);
+    for( i = PERMUTATIONS - 1; i >= 0; i-- )
     {
         int value, position;
 
-        position = seed % 256;
+        position = seed % PERMUTATIONS;
         value = g->perm[position];
         while(value > i) {
             position++;
-            if(position > 255)
+            if(position > PERMUTATIONS - 1)
                 position = 0;
             value = g->perm[position];
         }
         
         seed += i * 17;
         g->perm[position] = i;
+        g->perm[position + PERMUTATIONS] = i;
     }
 
     return g;
 }
 
-int noise( Generator * g, int x, int y, int z )
+float noise( Generator * g, int x, int y, int z )
 {
     float n0, n1, n2, n3, F3, G3, s, t, x0, y0, z0, X0, Y0, Z0, x1, y1, z1, x2, y2, z2, x3, y3, z3, t0, t1, t2, t3;
     int i, j, k, i1, j1, k1, i2, j2, k2, ii, jj, kk, g0, g1, g2, g3;
@@ -106,15 +107,18 @@ int noise( Generator * g, int x, int y, int z )
     z3 = z0 - 1.0 + 3.0 * G3;
 
     // Determine the corners' gradient indices
-    ii = i & 255;
-    jj = j & 255;
-    kk = k & 255;
+    ii = i & 0xFF;
+    jj = j & 0xFF;
+    kk = k & 0xFF;
     
     // Determine the corners' gradient values
     g0 = g->perm[ii + g->perm[jj + g->perm[kk]]] % 12;
     g1 = g->perm[ii + i1 + g->perm[jj + j1 + g->perm[kk + k1]]] % 12;
     g2 = g->perm[ii + i2 + g->perm[jj + j2 + g->perm[kk + k2]]] % 12;
     g3 = g->perm[ii + 1 + g->perm[jj + 1 + g->perm[kk + 1]]] % 12;
+
+    printf("Gradients: %d %d %d %d\n", g0, g1, g2, g3);
+
 
     // Calculate the contribution from each of the four corners
     t0 = 0.5 - x0 * x0 - y0 * y0 - z0 * z0;
@@ -167,15 +171,17 @@ int main()
     seed = 123;
     g = setup(seed);
     
-    noise_value = noise(g, 10, 3901, 1239032);
+    noise_value = noise(g, 10, 0, 14);
     printf("Noise value: %f\n", noise_value);
 
-    /* 
-    Test permutation table generation
+    noise_value = noise(g, 10, 0, 15);
+    printf("Noise value: %f\n", noise_value);
+/*
+    //Test permutation table generation
     
-    for(int i = 0; i < 256; i++)
+    for(int i = 0; i < PERMUTATIONS * 2; i++)
     {
         printf("%d, ", g->perm[i]);
     }
-    */
+*/
 }
