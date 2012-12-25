@@ -66,6 +66,9 @@ int Chunk_init( Chunk *self, PyObject *args, PyObject *kwds );
 PyObject *Chunk_get_block( Chunk *self, PyObject *args );
 PyObject *Chunk_put_block( Chunk *self, PyObject *args );
 
+// generator.c
+PyTypeObject minecraft_GeneratorType;
+
 // nbt.c
 long swap_endianness( unsigned char *buffer, int bytes );
 void swap_endianness_in_memory( unsigned char *buffer, int bytes );

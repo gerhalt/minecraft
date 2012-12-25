@@ -8,8 +8,12 @@ it to be usable from other modules.
 Some code is derived from sources referenced on the wiki "Generator" write-up
 */
 
+#include <Python.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <structmember.h>
+#include "../minecraft.h"
 
 #define PERMUTATIONS      256
 
@@ -20,42 +24,15 @@ float grad[12][3] = {
 };
 
 typedef struct Generator {
+    PyObject_HEAD
     int * perm;
+    int seed;
 } Generator;
 
 // Helper function to calculate a dot product
 float dot( float g[], float x, float y, float z )
 {
     return g[0] * x + g[1] + y + g[2] * z;
-}
-
-Generator * setup( int seed )
-{
-    Generator * g;
-    int i;
-
-    g = malloc(sizeof(Generator));
-
-    g->perm = calloc(sizeof(int), PERMUTATIONS * 2);
-    for( i = PERMUTATIONS - 1; i >= 0; i-- )
-    {
-        int value, position;
-
-        position = seed % PERMUTATIONS;
-        value = g->perm[position];
-        while(value > i) {
-            position++;
-            if(position > PERMUTATIONS - 1)
-                position = 0;
-            value = g->perm[position];
-        }
-        
-        seed += i * 17;
-        g->perm[position] = i;
-        g->perm[position + PERMUTATIONS] = i;
-    }
-
-    return g;
 }
 
 float noise( Generator * g, int x, int y, int z )
@@ -117,8 +94,7 @@ float noise( Generator * g, int x, int y, int z )
     g2 = g->perm[ii + i2 + g->perm[jj + j2 + g->perm[kk + k2]]] % 12;
     g3 = g->perm[ii + 1 + g->perm[jj + 1 + g->perm[kk + 1]]] % 12;
 
-    printf("Gradients: %d %d %d %d\n", g0, g1, g2, g3);
-
+    // printf("Gradients: %d %d %d %d\n", g0, g1, g2, g3);
 
     // Calculate the contribution from each of the four corners
     t0 = 0.5 - x0 * x0 - y0 * y0 - z0 * z0;
@@ -159,9 +135,10 @@ float noise( Generator * g, int x, int y, int z )
 
     // Return summed corner noise contributions
     // TODO: Unscaled for now
-    return n0 + n1 + n2 + n3;
+    return 16 * (n0 + n1 + n2 + n3);
 }
 
+/*
 int main()
 {
     Generator * g;
@@ -171,17 +148,128 @@ int main()
     seed = 123;
     g = setup(seed);
     
-    noise_value = noise(g, 10, 0, 14);
-    printf("Noise value: %f\n", noise_value);
+    for( i = 0; i < 100000; i++ )
+    {
+        noise_value = noise(g, (float) i, 0, 14);
+//        printf("Noise value: %f\n", noise_value);
+    }
 
-    noise_value = noise(g, 10, 0, 15);
-    printf("Noise value: %f\n", noise_value);
-/*
     //Test permutation table generation
     
     for(int i = 0; i < PERMUTATIONS * 2; i++)
     {
         printf("%d, ", g->perm[i]);
     }
-*/
 }
+*/
+
+/*
+
+Python
+
+*/
+PyObject * Generator_noise( Generator *self, PyObject *args )
+{
+    PyObject *output;
+    float x, y, z;
+
+    if( !PyArg_ParseTuple(args, "fff", &x, &y, &z) )
+    {
+        PyErr_Format(PyExc_Exception, "Unable to parse arguments.");
+        return NULL;
+    }
+
+    output = PyFloat_FromDouble((double) noise(self, x, y, z));
+    Py_INCREF(output);
+    return output;
+}
+
+void Generator_dealloc( Generator *self )
+{
+    free(self->perm);
+    self->ob_type->tp_free((PyObject *) self);
+}
+
+int Generator_init( Generator *self, PyObject *args, PyObject *kwds )
+{
+    int i, seed;
+
+    if( !PyArg_ParseTuple(args, "i", &seed) )
+        return -1;
+
+    self->seed = seed;
+
+    // Generate the permutations table, doubled to avoid more work when indices wrap
+    self->perm = calloc(sizeof(int), PERMUTATIONS * 2);
+    for( i = PERMUTATIONS - 1; i >= 0; i-- )
+    {
+        int value, position;
+
+        position = seed % PERMUTATIONS;
+        value = self->perm[position];
+        while(value > i) {
+            position++;
+            if(position > PERMUTATIONS - 1)
+                position = 0;
+            value = self->perm[position];
+        }
+        
+        seed += i * 17;
+        self->perm[position] = i;
+        self->perm[position + PERMUTATIONS] = i;
+    }
+
+    return 0;
+}
+
+static PyMemberDef Generator_members[] = {
+    {"seed", T_INT, offsetof(Generator, seed), 0, "Seed"},
+    {NULL}
+};
+
+static PyMethodDef Generator_methods[] = {
+    {"noise", (PyCFunction) Generator_noise, METH_VARARGS, "Get the noise strength at a particular point in three dimensional space."},
+    {NULL}
+};
+
+PyTypeObject minecraft_GeneratorType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "minecraft.Generator",     /*tp_name*/
+    sizeof(Generator),         /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)Generator_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "Generator objects",       /* tp_doc */
+    0,                     /* tp_traverse */
+    0,                     /* tp_clear */
+    0,                     /* tp_richcompare */
+    0,                     /* tp_weaklistoffset */
+    0,                     /* tp_iter */
+    0,                     /* tp_iternext */
+    Generator_methods,         /* tp_methods */
+    Generator_members,         /* tp_members */
+    0,                         /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)Generator_init,  /* tp_init */
+    0,                         /* tp_alloc */
+    0,                         /* tp_new */
+};

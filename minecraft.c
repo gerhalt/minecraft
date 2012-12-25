@@ -63,24 +63,33 @@ PyMODINIT_FUNC initminecraft(void)
 {
     PyObject *m;
     
+    m = Py_InitModule3("minecraft", MinecraftMethods, "Minecraft module");
+
+    // Block
     minecraft_BlockType.tp_new = PyType_GenericNew;
     if( PyType_Ready(&minecraft_BlockType) < 0 )
         return;
+    Py_INCREF(&minecraft_BlockType);
+    PyModule_AddObject(m, "Block", (PyObject *) &minecraft_BlockType);
 
+    // Chunk
     minecraft_ChunkType.tp_new = PyType_GenericNew;
     if( PyType_Ready(&minecraft_ChunkType) < 0 )
         return;
-    
+    Py_INCREF(&minecraft_ChunkType);
+    PyModule_AddObject(m, "Chunk", (PyObject *) &minecraft_ChunkType);
+
+    // World
     minecraft_WorldType.tp_new = PyType_GenericNew;
     if( PyType_Ready(&minecraft_WorldType) < 0 )
         return;
-
-    m = Py_InitModule3("minecraft", MinecraftMethods, "Minecraft module");
-
-    Py_INCREF(&minecraft_BlockType);
-    PyModule_AddObject(m, "Block", (PyObject *) &minecraft_BlockType);
-    Py_INCREF(&minecraft_ChunkType);
-    PyModule_AddObject(m, "Chunk", (PyObject *) &minecraft_ChunkType);
     Py_INCREF(&minecraft_WorldType);
     PyModule_AddObject(m, "World", (PyObject *) &minecraft_WorldType);
+
+    // Block
+    minecraft_GeneratorType.tp_new = PyType_GenericNew;
+    if( PyType_Ready(&minecraft_GeneratorType) < 0 )
+        return;
+    Py_INCREF(&minecraft_GeneratorType);
+    PyModule_AddObject(m, "Generator", (PyObject *) &minecraft_GeneratorType);
 }
