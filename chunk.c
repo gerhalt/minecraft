@@ -253,7 +253,7 @@ PyObject *Chunk_put_block( Chunk *self, PyObject *args )
         PyObject *new;
 
         new = PyInt_FromLong(y / 16); // This should end up not needing to be INCREF'd I think
-        printf("Creating new section!\n");
+        printf("Creating new section (%ld)\n", PyInt_AsLong(new));
 
         section = PyDict_New();
         Py_INCREF(section);

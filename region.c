@@ -43,7 +43,8 @@ int update_region( Region *region, Chunk *chunk )
         unsigned char current_sector_count;
 
         current_offset = swap_endianness(region->buffer + i, 3);
-        if( current_offset > last_offset )
+        current_sector_count = region->buffer[i + 3];
+        if( current_offset > last_offset && current_sector_count != 0 )
         {
             last_offset = current_offset;
             last_sector_count = current_sector_count;
@@ -51,8 +52,7 @@ int update_region( Region *region, Chunk *chunk )
     }
     printf("Last Offset: %d | Sector Count: %d\n", last_offset, last_sector_count);
 
-    // Write out the chunk to a temporary buffer, as a staging ground for
-    // compression directly to the region_buffer
+    // Write out the chunk to a temporary buffer, as a staging ground
     uncompressed_chunk = malloc(1000000);
     uncompressed_size = write_tags(uncompressed_chunk, chunk->dict, chunk_tags);
     printf("Chunk (size %d) written to intermediate buffer!\n", uncompressed_size);
@@ -74,13 +74,13 @@ int update_region( Region *region, Chunk *chunk )
     if( difference != 0 )
     {
         // Create space, if needed
-        if( region->current_size + difference *4096 >= region->buffer_size )
+        if( region->current_size + difference * 4096 >= region->buffer_size )
         {
             unsigned char *new_region_buffer;
 
             printf("Buffer is too small, increasing size!\n");
             // Allocate a new region, with a few extra sectors worth of padding
-            new_region_buffer = malloc(region->current_size + (difference + 4) *4096);
+            new_region_buffer = malloc(region->current_size + (difference + 4) * 4096);
 
             // TODO: Optimize, since if the chunk information is being
             // inserted, chunks after it will be moved in memory again
@@ -96,9 +96,9 @@ int update_region( Region *region, Chunk *chunk )
             void *next_chunk, *next_chunk_after;
             int num;
 
-            num = (last_offset + last_sector_count - (location + sector_count)) *4096;
-            next_chunk = region->buffer + (location + sector_count) *4096;
-            next_chunk_after = region->buffer + (location + sector_count + difference) *4096;
+            num = (last_offset + last_sector_count - (location + sector_count)) * 4096;
+            next_chunk = region->buffer + (location + sector_count) * 4096;
+            next_chunk_after = region->buffer + (location + sector_count + difference) * 4096;
             printf("Shifting %d bytes worth of chunk data from %p to %p\n", num, next_chunk, next_chunk_after);
 
             memmove(next_chunk_after, next_chunk, num);

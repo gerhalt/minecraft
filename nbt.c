@@ -157,7 +157,7 @@ int inf( unsigned char *dst, unsigned char *src, int bytes, int mode )
     strm.next_in = src;
     strm.avail_in = bytes;
 
-    inflateInit2(&strm, MAX_WBITS + mode *32); // + 32 bits for header detection and gzip
+    inflateInit2(&strm, MAX_WBITS + mode * 32); // + 32 bits for header detection and gzip
     ret = inflate(&strm, Z_FINISH);
     inflateEnd(&strm);
 
@@ -186,14 +186,14 @@ int def( unsigned char *dst, unsigned char *src, int bytes, int mode, int *size 
     strm.opaque = Z_NULL;
 
     strm.next_out = dst;
-    strm.avail_out = CHUNK_INFLATE_MAX;
+    strm.avail_out = CHUNK_DEFLATE_MAX;
     strm.next_in = src;
     strm.avail_in = bytes;
 
     deflateInit2(&strm, 
                  Z_DEFAULT_COMPRESSION,
                  Z_DEFLATED, 
-                 MAX_WBITS + mode *16,  // + 16 bits for simple gzip header
+                 MAX_WBITS + mode * 16,  // + 16 bits for simple gzip header
                  8,
                  Z_DEFAULT_STRATEGY);
     ret = deflate(&strm, Z_FINISH);
@@ -386,7 +386,6 @@ int write_tags( unsigned char *dst, PyObject *dict, TagType tags[] )
     // Write the end tag
     memset(dst, 0, 1);
 
-    printf("MOVED: %d\n", moved + 4);
     return moved + 4; // Size of subtags + 4 bytes for root tag
 }
 

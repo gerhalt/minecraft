@@ -10,8 +10,8 @@ Extension module header file
 // Buffer sizes
 #define SMALL_DEFLATE_MAX   10000;
 #define SMALL_INFLATE_MAX   20000;
-#define CHUNK_DEFLATE_MAX   65536;
-#define CHUNK_INFLATE_MAX   131072;
+#define CHUNK_DEFLATE_MAX   1000000;
+#define CHUNK_INFLATE_MAX   1000000;
 
 #define MAX_CHUNKS              101
 #define MAX_REGIONS             8

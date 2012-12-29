@@ -108,7 +108,6 @@ PyObject * get_chunk( World *world, int x, int z )
     int hash;
 
     hash = (x << 16 + z) % MAX_CHUNKS;
-    printf("Chunk hash: %d\n", hash);
 
     chunk = world->chunks[hash];
     if( chunk == NULL || (((Chunk *) chunk)->x != x || ((Chunk *) chunk)->z != z) )
