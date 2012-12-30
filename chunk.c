@@ -18,16 +18,16 @@ int decompress_chunk( unsigned char *region, unsigned char *decompressed, int x,
     int rc;
 
     printf("Finding chunk (%d, %d)\n", x, z);
-    header_offset = 4 *((x & 31) + (z & 31) *32);
+    header_offset = 4 *((x & 31) + (z & 31) * 32);
 
-    chunk_offset = swap_endianness(region + header_offset, 3) *4096;
+    chunk_offset = swap_endianness(region + header_offset, 3) * 4096;
     if ( chunk_offset == 0 )
     {
         printf("Chunk is empty, crap!\n");
         return 1;
     }
 
-    printf("Offset: %d | Length: %d\n", chunk_offset, *(region + header_offset + 3) *4096);
+    printf("Offset: %d | Length: %d\n", chunk_offset, *(region + header_offset + 3) * 4096);
 
     // Read the chunk length from the start of the chunk
     chunk_length = swap_endianness(region + chunk_offset, 4);
@@ -172,7 +172,7 @@ PyObject *Chunk_get_block( Chunk *self, PyObject *args )
 
         data = blocklight = skylight = 0;
         section_y = y % 16;
-        position = section_y *16 *16 + z *16 + x;
+        position = section_y * 16 * 16 + z * 16 + x;
 
         // We know it will contain the "Blocks" byte array
         byte_array = (char *) PyDict_GetItemString(section, "Blocks");
@@ -286,7 +286,7 @@ PyObject *Chunk_put_block( Chunk *self, PyObject *args )
         PyList_Append(sections, section);
     }
 
-    position = (y % 16) *16 *16 + z *16 + x;
+    position = (y % 16) * 16 * 16 + z * 16 + x;
     byte_array = PyByteArray_AsString(PyDict_GetItemString(section, "Blocks"));
     byte_array[position] = block->id;
 

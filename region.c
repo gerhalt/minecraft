@@ -25,7 +25,7 @@ int update_region( Region *region, Chunk *chunk )
     int i, location, offset, timestamp, last_offset, uncompressed_size, compressed_size, difference, new_sector_count;
     unsigned char sector_count, last_sector_count, *uncompressed_chunk, *compressed_chunk;
 
-    offset = 4 *((chunk->x & 31) + (chunk->z & 31) *32);
+    offset = 4 * ((chunk->x & 31) + (chunk->z & 31) * 32);
     location = swap_endianness(region->buffer + offset, 3);
     sector_count = *(region->buffer + offset + 3);
 
@@ -66,9 +66,8 @@ int update_region( Region *region, Chunk *chunk )
    
     // Ensure that the buffer area we have will be big enough for the 
     // compressed chunk, including header
-    new_sector_count = (compressed_size + 4096 + 5 - 1) / 4096; // ceil(A / B) = (A + B - 1) / B
+    new_sector_count = (compressed_size + 5 + 4096 - 1) / 4096; // ceil(A / B) = (A + B - 1) / B
     
-    // new_sector_count vs. sector_count
     difference = new_sector_count - sector_count;
     printf("Difference: %d\n", difference);
     if( difference != 0 )
@@ -125,10 +124,17 @@ int update_region( Region *region, Chunk *chunk )
         location = last_offset + last_sector_count;    
     }
 
-    *(int *) (region->buffer + location *4096) = compressed_size + 1;
-    swap_endianness_in_memory(region->buffer + location *4096, 4);
-    *(unsigned char *) (region->buffer + location *4096 + 4) = 2; // Compression type
-    memcpy(region->buffer + location *4096 + 5, compressed_chunk, compressed_size);
+    // Update header info in the region file lookup table
+    printf("New Location: %d | New Sector Count: %d\n", location, new_sector_count);
+    memcpy(region->buffer + offset, &location, 3);
+    swap_endianness_in_memory(region->buffer + offset, 3);
+    *(unsigned char *) (region->buffer + offset + 3) = new_sector_count;
+
+    // Update chunk header and write the chunk back to the file
+    *(int *) (region->buffer + location * 4096) = compressed_size + 1;
+    swap_endianness_in_memory(region->buffer + location * 4096, 4);
+    *(unsigned char *) (region->buffer + location * 4096 + 4) = 2; // Compression type
+    memcpy(region->buffer + location * 4096 + 5, compressed_chunk, compressed_size);
 
     free(compressed_chunk);
     free(uncompressed_chunk);

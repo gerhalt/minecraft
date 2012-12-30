@@ -84,7 +84,7 @@ long swap_endianness( unsigned char *buffer, int bytes )
     transform = 0;
     for( i = 0; i < bytes; i++ )
     {
-        transform = buffer[i]<<((bytes - i - 1) *8) | transform;
+        transform = buffer[i]<<((bytes - i - 1) * 8) | transform;
     }
     return transform;
 }
